@@ -989,7 +989,6 @@ main {
   position: fixed;
   height: auto; /* sonst ragt umbrechender Text beim Einklappen heraus */
   z-index: 6;
-  transition: transform 0.25s ease-in-out;
 }
 
 #footer.collapsed {

@@ -243,7 +243,8 @@ function drawChimney(ctx: CanvasRenderingContext2D, g: LocalGeometry): void {
                   p(0.38, 0.62, heightPx)], "#c9483f");
 }
 
-function drawExtra(ctx: CanvasRenderingContext2D, g: LocalGeometry, look: BuildingLook, roofZ: number): void {
+function drawExtra(ctx: CanvasRenderingContext2D, g: LocalGeometry, look: BuildingLook, roofZ: number,
+                   frame: number): void {
     const p = (u: number, v: number, z = 0) => g.localToScreen(u, v, z);
     switch (look.extra) {
         case "chimney":
@@ -258,6 +259,19 @@ function drawExtra(ctx: CanvasRenderingContext2D, g: LocalGeometry, look: Buildi
         case "field":
             polygon(ctx, [p(0, 0), p(1, 0), p(1, 1), p(0, 1)], "#4caf50");
             polygon(ctx, [p(0.48, 0), p(0.52, 0), p(0.52, 1), p(0.48, 1)], "rgba(255, 255, 255, 0.7)");
+            if (frame >= 0) {
+                // Spiel läuft: Spieler als Punkte, die sich mit dem Animationsbild bewegen
+                const players = [[0.2, 0.3, "#d0312d"], [0.35, 0.7, "#d0312d"], [0.7, 0.25, "#2c7fb8"],
+                                 [0.8, 0.65, "#2c7fb8"], [0.55, 0.5, "#ffffff"]];
+                players.forEach((pl, i) => {
+                    const shift = 0.08 * Math.sin((frame + i * 2) * Math.PI / 4);
+                    const c = p((pl[0] as number) + shift, (pl[1] as number) - shift);
+                    ctx.beginPath();
+                    ctx.arc(c.x, c.y - 2, Math.max(1.5, g.tileWidth / 40), 0, Math.PI * 2);
+                    ctx.fillStyle = pl[2] as string;
+                    ctx.fill();
+                });
+            }
             break;
         case "runway":
             polygon(ctx, [p(0, 0.1), p(1, 0.1), p(1, 0.9), p(0, 0.9)], "#4a4a4a");
@@ -295,7 +309,10 @@ function drawExtra(ctx: CanvasRenderingContext2D, g: LocalGeometry, look: Buildi
             ctx.lineTo(top.x, top.y);
             ctx.stroke();
             ctx.beginPath();
-            ctx.ellipse(top.x, top.y, g.tileWidth * 0.14, g.tileWidth * 0.06, -0.3, 0, Math.PI * 2);
+            // Die Schüssel dreht sich mit dem Animationsbild (8 Bilder = eine Umdrehung)
+            const turn = frame >= 0 ? Math.abs(Math.cos(frame * Math.PI / 4)) : 1;
+            ctx.ellipse(top.x, top.y, g.tileWidth * 0.14 * Math.max(0.2, turn), g.tileWidth * 0.06, -0.3, 0,
+                        Math.PI * 2);
             ctx.fillStyle = "#e8e8e8";
             ctx.fill();
             break;
@@ -310,6 +327,14 @@ function drawExtra(ctx: CanvasRenderingContext2D, g: LocalGeometry, look: Buildi
             ctx.ellipse(c.x, c.y, g.tileWidth * 0.12, g.tileWidth * 0.06, 0, 0, Math.PI * 2);
             ctx.fillStyle = "#4a90d9";
             ctx.fill();
+            // Wasserstrahl, der mit dem Animationsbild höher und niedriger wird
+            const jet = g.tileWidth * (0.12 + 0.05 * ((frame < 0 ? 0 : frame) % 4));
+            ctx.strokeStyle = "rgba(200, 225, 255, 0.9)";
+            ctx.lineWidth = Math.max(1.5, g.tileWidth / 40);
+            ctx.beginPath();
+            ctx.moveTo(c.x, c.y);
+            ctx.lineTo(c.x, c.y - jet);
+            ctx.stroke();
             break;
         }
     }
@@ -325,7 +350,8 @@ function drawBoxAt(ctx: CanvasRenderingContext2D, g: LocalGeometry, u0: number, 
 }
 
 /** Zeichnet Boden und Gebäudeteil einer Kachel. (0, 0) des Kontexts ist die obere Rautenspitze. */
-export function drawBuildingPart(ctx: CanvasRenderingContext2D, g: LocalGeometry, part: BuildingPart): void {
+export function drawBuildingPart(ctx: CanvasRenderingContext2D, g: LocalGeometry, part: BuildingPart,
+                                 frame = -1): void {
     const look = lookFor(part);
     polygon(ctx, [g.localToScreen(0, 0), g.localToScreen(1, 0), g.localToScreen(1, 1), g.localToScreen(0, 1)], look.lot);
 
@@ -345,6 +371,54 @@ export function drawBuildingPart(ctx: CanvasRenderingContext2D, g: LocalGeometry
             drawPointedRoof(ctx, g, lo, hi, heightPx, g.tileWidth * 0.35, column.roof);
         }
         roofZ = heightPx;
+        // Reaktor in Betrieb: das Dach glüht im Takt
+        if (part.zone === "nuclear" && frame >= 0) {
+            const glow = ["rgba(120, 220, 255, 0.35)", "rgba(120, 220, 255, 0.55)", "rgba(120, 220, 255, 0.75)",
+                          "rgba(120, 220, 255, 0.55)"][frame % 4];
+            polygon(ctx, [g.localToScreen(lo, lo, heightPx), g.localToScreen(hi, lo, heightPx),
+                          g.localToScreen(hi, hi, heightPx), g.localToScreen(lo, hi, heightPx)], glow);
+        }
     }
-    drawExtra(ctx, g, look, roofZ);
+    drawExtra(ctx, g, look, roofZ, frame);
+}
+
+/** Höhe (Pixel), aus der Rauch aufsteigt: oben aus dem Schornstein oder vom Dach. */
+export function smokeBase(part: BuildingPart, tileWidth: number): number {
+    const look = lookFor(part);
+    if (look.extra === "chimney") {
+        return tileWidth * 0.95;
+    }
+    return look.column ? look.column.height * tileWidth : 0;
+}
+
+/** Drei Rauchwolken, die mit dem Animationsbild nach oben wandern und größer werden. */
+export function drawSmoke(ctx: CanvasRenderingContext2D, g: LocalGeometry, baseZ: number, frame: number): void {
+    for (let i = 0; i < 3; i++) {
+        const step = (frame + i * 2) % 6;           // 0 … 5: Wolke steigt, dann neue Wolke unten
+        const z = baseZ + g.tileWidth * (0.06 + step * 0.06);
+        const c = g.localToScreen(0.5 + step * 0.02, 0.5 - step * 0.03, z);
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, g.tileWidth * (0.05 + step * 0.015), 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(90, 90, 90, " + (0.55 - step * 0.08) + ")";
+        ctx.fill();
+    }
+}
+
+/** Gelber Blitz: Diese Zone hat keinen Strom (blinkt, gesteuert vom AnimationManager). */
+export function drawLightning(ctx: CanvasRenderingContext2D, g: LocalGeometry, baseZ: number): void {
+    const c = g.localToScreen(0.5, 0.5, baseZ + g.tileWidth * 0.12);
+    const s = g.tileWidth * 0.12;
+    ctx.beginPath();
+    ctx.moveTo(c.x + s * 0.3, c.y - s * 1.6);
+    ctx.lineTo(c.x - s * 0.6, c.y + s * 0.1);
+    ctx.lineTo(c.x - s * 0.05, c.y + s * 0.1);
+    ctx.lineTo(c.x - s * 0.35, c.y + s * 1.5);
+    ctx.lineTo(c.x + s * 0.65, c.y - s * 0.3);
+    ctx.lineTo(c.x + s * 0.1, c.y - s * 0.3);
+    ctx.closePath();
+    ctx.fillStyle = "#ffd23f";
+    ctx.strokeStyle = "#7a5b00";
+    ctx.lineWidth = 1;
+    ctx.fill();
+    ctx.stroke();
 }

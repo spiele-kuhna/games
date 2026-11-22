@@ -76,7 +76,7 @@ function Game(gameMap, tileSet, snowTileSet, spriteSheet, difficulty, name) {
   var topCanvas = new GameCanvas('canvasContainer');
   topCanvas.init(this.gameMap, this.tileSet, spriteSheet);
   var isoCanvas = new IsoCanvas(document.getElementById(GameCanvas.DEFAULT_ID));
-  isoCanvas.init(this.gameMap);
+  isoCanvas.init(this.gameMap, this.simulation.spriteManager);
   this.gameCanvas = new ViewSwitcher(topCanvas, isoCanvas);
   this.gameCanvas.setMode(ViewSwitcher.loadPreference());
   this.setupViewControls();

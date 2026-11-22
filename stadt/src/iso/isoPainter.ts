@@ -25,8 +25,8 @@
  */
 
 import { BuildingPart } from "./buildingTable";
-import { drawBuildingPart, requiredHeadroom } from "./isoBuildings";
-import { EAST, NORTH, SOUTH, TileLook, WEST, ZoneType } from "./tileKinds";
+import { drawBuildingPart, drawLightning, drawSmoke, requiredHeadroom, smokeBase } from "./isoBuildings";
+import { EAST, NORTH, SOUTH, TileLook, Traffic, WEST, ZoneType } from "./tileKinds";
 
 /** Farben – alle selbst gewählt. */
 const COLOURS = {
@@ -86,6 +86,14 @@ export interface PaintRequest {
     readonly variant: number;
     /** Gebäudeteil auf dieser Kachel (aus buildingTable.ts) oder null */
     readonly building: BuildingPart | null;
+    /** Verkehr auf der Straße (Stärke und Animationsbild) */
+    readonly traffic: Traffic;
+    /** Animationsbild (Feuer, Radar, Brunnen …) oder −1 */
+    readonly frame: number;
+    /** Rauch über dieser Kachel */
+    readonly smoke: boolean;
+    /** Blitz-Symbol: Zone ohne Strom */
+    readonly lightning: boolean;
 }
 
 /** Ein zwischengespeichertes Kachelbild und wie weit es über die Rautenspitze hinausragt. */
@@ -135,7 +143,9 @@ export class IsoTilePainter {
         const b = request.building;
         const key = [look.ground, look.cover, look.zone, look.roads, look.rails, look.wires, look.bridge,
                      request.landSides, request.variant,
-                     b ? [b.zone, b.size, b.dx, b.dy, b.level, b.value].join(",") : "-"].join("|");
+                     b ? [b.zone, b.size, b.dx, b.dy, b.level, b.value].join(",") : "-",
+                     request.traffic.level, request.traffic.frame, request.frame, request.smoke,
+                     request.lightning].join("|");
         let image = this.cache[key];
         if (!image) {
             image = this.renderImage(request);
@@ -146,9 +156,12 @@ export class IsoTilePainter {
 
     private renderImage(request: PaintRequest): CachedImage {
         // Gebäude brauchen mehr Platz nach oben als flache Kacheln
-        const headroom = request.building !== null
+        let headroom = request.building !== null
             ? Math.max(this.headroom, requiredHeadroom(request.building, this.tileWidth) + 4)
             : this.headroom;
+        if (request.smoke || request.lightning) {
+            headroom += Math.ceil(this.tileWidth * 0.5);   // Platz für Rauchwolken bzw. den Blitz
+        }
         const canvas = document.createElement("canvas");
         canvas.width = Math.ceil(this.tileWidth * this.pixelRatio);
         canvas.height = Math.ceil((this.tileHeight + headroom) * this.pixelRatio);
@@ -161,13 +174,20 @@ export class IsoTilePainter {
         const look = request.look;
         this.drawGround(ctx, request);
         if (look.cover === "zone") {
-            this.drawZone(ctx, look.zone, request.building);
+            this.drawZone(ctx, look.zone, request.building, request.frame);
         } else {
-            this.drawCover(ctx, look, request.variant);
+            this.drawCover(ctx, look, request.variant, request.frame);
         }
-        if (look.roads !== 0) { this.drawRoads(ctx, look.roads, look.bridge); }
+        if (look.roads !== 0) {
+            this.drawRoads(ctx, look.roads, look.bridge);
+            if (request.traffic.level > 0) { this.drawCars(ctx, look.roads, request.traffic); }
+        }
         if (look.rails !== 0) { this.drawRails(ctx, look.rails); }
         if (look.wires !== 0) { this.drawWires(ctx, look.wires); }
+
+        const top = request.building !== null ? smokeBase(request.building, this.tileWidth) : 0;
+        if (request.smoke && request.frame >= 0) { drawSmoke(ctx, this, top, request.frame); }
+        if (request.lightning) { drawLightning(ctx, this, top); }
         return { canvas, headroom };
     }
 
@@ -175,16 +195,65 @@ export class IsoTilePainter {
      * Zonen: leere Zonen als farbig umrandete Fläche, bebaute als Gebäude mit Höhe (isoBuildings.ts).
      * Brunnen im Park stehen nicht in der Gebäudetabelle, werden aber genauso gezeichnet.
      */
-    private drawZone(ctx: CanvasRenderingContext2D, zone: ZoneType | null, building: BuildingPart | null): void {
+    private drawZone(ctx: CanvasRenderingContext2D, zone: ZoneType | null, building: BuildingPart | null,
+                     frame: number): void {
         if (zone === "park") {
-            drawBuildingPart(ctx, this, { dx: 0, dy: 0, level: 0, size: 1, value: 0, zone: "park" });
+            drawBuildingPart(ctx, this, { dx: 0, dy: 0, level: 0, size: 1, value: 0, zone: "park" }, frame);
             return;
         }
         if (building === null || building.level < 0) {
             this.drawZonePlaceholder(ctx, zone);
             return;
         }
-        drawBuildingPart(ctx, this, building);
+        drawBuildingPart(ctx, this, building, frame);
+    }
+
+    /*
+     * Autos auf der Straße: bei wenig Verkehr eins, bei viel Verkehr zwei je Straßenarm. Mit jedem
+     * Animationsbild rücken sie ein Stück weiter – so sieht es aus, als würden sie fahren.
+     */
+    private drawCars(ctx: CanvasRenderingContext2D, mask: number, traffic: Traffic): void {
+        const colours = ["#d0312d", "#f2f2f2", "#2c7fb8", "#e1a33b", "#3a3a3a"];
+        const perArm = traffic.level;
+        let colour = 0;
+        this.forEachDirection(mask, (direction) => {
+            for (let i = 0; i < perArm; i++) {
+                // Position entlang des Arms: 0 = Kachelrand, 0.5 = Mitte
+                const along = ((traffic.frame * 0.12 + i * 0.25 + direction * 0.07) % 0.42) + 0.04;
+                const lane = i % 2 === 0 ? 0.42 : 0.54;   // rechte bzw. linke Fahrspur
+                const length = 0.12;
+                const width = 0.07;
+                let u0: number;
+                let v0: number;
+                let u1: number;
+                let v1: number;
+                if (direction === EAST || direction === WEST) {
+                    const start = direction === WEST ? along : 1 - along - length;
+                    u0 = start; u1 = start + length; v0 = lane; v1 = lane + width;
+                } else {
+                    const start = direction === NORTH ? along : 1 - along - length;
+                    v0 = start; v1 = start + length; u0 = lane; u1 = lane + width;
+                }
+                this.fillLocalBox(ctx, u0, v0, u1, v1, this.tileWidth * 0.035, colours[colour++ % colours.length]);
+            }
+        });
+    }
+
+    /** Kleiner Quader (Auto) in Kachelkoordinaten. */
+    private fillLocalBox(ctx: CanvasRenderingContext2D, u0: number, v0: number, u1: number, v1: number,
+                         height: number, colour: string): void {
+        const p = (u: number, v: number, z: number) => this.localToScreen(u, v, z);
+        const face = (points: ScreenPoint[], fill: string) => {
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) { ctx.lineTo(points[i].x, points[i].y); }
+            ctx.closePath();
+            ctx.fillStyle = fill;
+            ctx.fill();
+        };
+        face([p(u1, v0, 0), p(u1, v1, 0), p(u1, v1, height), p(u1, v0, height)], "rgba(0, 0, 0, 0.35)");
+        face([p(u0, v1, 0), p(u1, v1, 0), p(u1, v1, height), p(u0, v1, height)], "rgba(0, 0, 0, 0.2)");
+        face([p(u0, v0, height), p(u1, v0, height), p(u1, v1, height), p(u0, v1, height)], colour);
     }
 
     // ---- Grundformen ----------------------------------------------------------------------------------------
@@ -260,14 +329,14 @@ export class IsoTilePainter {
 
     // ---- Bewuchs, Trümmer, Zonen ----------------------------------------------------------------------------
 
-    private drawCover(ctx: CanvasRenderingContext2D, look: TileLook, variant: number): void {
+    private drawCover(ctx: CanvasRenderingContext2D, look: TileLook, variant: number, frame: number): void {
         switch (look.cover) {
             case "trees": this.drawTrees(ctx, 3, variant); break;
             case "denseTrees": this.drawTrees(ctx, 6, variant); break;
             case "rubble": this.drawRubble(ctx); break;
             case "flood": this.fillLocalRect(ctx, 0.05, 0.05, 0.95, 0.95, COLOURS.flood); break;
             case "radioactive": this.drawRadioactive(ctx); break;
-            case "fire": this.drawFire(ctx); break;
+            case "fire": this.drawFire(ctx, frame); break;
         }
     }
 
@@ -312,12 +381,15 @@ export class IsoTilePainter {
         ctx.fill();
     }
 
-    private drawFire(ctx: CanvasRenderingContext2D): void {
+    private drawFire(ctx: CanvasRenderingContext2D, frame: number): void {
+        // Flammenhöhen ändern sich mit dem Animationsbild – das Feuer flackert
+        const flicker = [1, 0.75, 1.15, 0.85, 1.05, 0.7, 1.2, 0.9];
+        const f = frame < 0 ? 0 : frame;
         this.fillLocalRect(ctx, 0.1, 0.1, 0.9, 0.9, COLOURS.fireDark);
         const flames = [[0.35, 0.4, 0.9], [0.65, 0.45, 1.2], [0.5, 0.7, 1]];
         for (const flame of flames) {
             const base = this.localToScreen(flame[0], flame[1]);
-            const height = this.tileHeight * 0.6 * flame[2];
+            const height = this.tileHeight * 0.6 * flame[2] * flicker[(f + flames.indexOf(flame) * 3) % 8];
             const width = this.tileWidth * 0.09;
             ctx.beginPath();
             ctx.moveTo(base.x - width, base.y);

@@ -7,7 +7,8 @@
 
 import { mapToView, Rotation } from "../../src/iso/projection";
 import {
-    describeTile, EAST, NORTH, normalizeRoad, rotateMask, SOUTH, T, WEST, zoneTypeOf,
+    animationFrameOf, describeTile, EAST, isSmoke, LIGHTNING_BOLT, NORTH, normalizeRoad, rotateMask, SOUTH, T,
+    trafficOf, WEST, zoneTypeOf,
 } from "../../src/iso/tileKinds";
 import * as TileValues from "../../src/tileValues";
 
@@ -170,5 +171,33 @@ describe("isometric tile kinds", () => {
             expect(rotateMask(NORTH | EAST | SOUTH | WEST, 3)).toBe(NORTH | EAST | SOUTH | WEST);
             expect(rotateMask(EAST | WEST, 2)).toBe(EAST | WEST);
         });
+    });
+});
+
+describe("isometric animations", () => {
+    it("should read traffic level and frame from the road tile", () => {
+        expect(trafficOf(TileValues.ROADS)).toEqual({ frame: 0, level: 0 });
+        expect(trafficOf(TileValues.LTRFBASE + 2)).toEqual({ frame: 0, level: 1 });
+        expect(trafficOf(TileValues.LTRFBASE + 16 * 3 + 2)).toEqual({ frame: 3, level: 1 });
+        expect(trafficOf(TileValues.HTRFBASE + 16 + 5)).toEqual({ frame: 1, level: 2 });
+    });
+
+    it("should follow the frame order of animationManager.js", () => {
+        // registerSingleAnimation([747, 916, 917, 918, 919, 916]): Bilder 916–919 sind Bild 0–3
+        expect([916, 917, 918, 919].map((v) => animationFrameOf(v))).toEqual([0, 1, 2, 3]);
+        expect([920, 923].map((v) => animationFrameOf(v))).toEqual([0, 3]);
+        expect(animationFrameOf(TileValues.FIRE + 5)).toBe(5);
+        expect(animationFrameOf(TileValues.DIRT)).toBe(-1);
+    });
+
+    it("should know which animations are smoke", () => {
+        expect(isSmoke(TileValues.COALSMOKE2)).toBe(true);
+        expect(isSmoke(886)).toBe(true);
+        expect(isSmoke(TileValues.RADAR3)).toBe(false);
+        expect(isSmoke(TileValues.FIRE)).toBe(false);
+    });
+
+    it("should use the lightning bolt value from tileValues.ts", () => {
+        expect(LIGHTNING_BOLT).toBe(TileValues.LIGHTNINGBOLT);
     });
 });

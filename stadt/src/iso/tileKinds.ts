@@ -212,3 +212,64 @@ export function rotateMask(mask: number, rotation: Rotation): number {
     }
     return result;
 }
+
+// ---- Animationen (Arbeitspaket 4) ---------------------------------------------------------------------------
+
+/** Verkehr auf einer Straße: Stärke 0 (keiner), 1 (wenig), 2 (viel) und Animationsbild 0–3. */
+export interface Traffic {
+    readonly level: number;
+    readonly frame: number;
+}
+
+/*
+ * Straßen mit Verkehr liegen in tileValues.ts in vier 16er-Blöcken je Stärke (wenig: 80–143, viel: 144–207).
+ * Jeder Block ist ein Animationsbild; der AnimationManager schaltet zwischen ihnen um.
+ */
+export function trafficOf(value: number): Traffic {
+    if (value >= 80 && value <= 143) {
+        return { frame: Math.floor((value - 80) / 16), level: 1 };
+    }
+    if (value >= 144 && value <= 207) {
+        return { frame: Math.floor((value - 144) / 16), level: 2 };
+    }
+    return { frame: 0, level: 0 };
+}
+
+/** Bereiche mit Animationsbildern: erster Wert, Anzahl Bilder je Folge, Länge des ganzen Bereichs. */
+const ANIMATION_RANGES: Array<{ from: number, to: number, frames: number, smoke: boolean }> = [
+    { frames: 8, from: 56, smoke: false, to: 63 },     // Feuer
+    { frames: 8, from: 832, smoke: false, to: 839 },   // Radar
+    { frames: 4, from: 840, smoke: false, to: 843 },   // Brunnen
+    { frames: 8, from: 844, smoke: true, to: 851 },    // Industrie
+    { frames: 8, from: 852, smoke: true, to: 859 },    // Industrie, Rauch
+    { frames: 24, from: 860, smoke: false, to: 883 },  // kleine Explosionen
+    { frames: 4, from: 884, smoke: true, to: 915 },    // Industrie, Rauch (8 Folgen à 4 Bilder)
+    { frames: 4, from: 916, smoke: true, to: 931 },    // Kohlekraftwerk, Schornsteine (4 Folgen à 4)
+    { frames: 8, from: 932, smoke: false, to: 947 },   // Fußballspiel (2 Folgen à 8)
+    { frames: 4, from: 948, smoke: false, to: 951 },   // Zugbrücke senkrecht
+    { frames: 4, from: 828, smoke: false, to: 831 },   // Zugbrücke waagerecht
+    { frames: 4, from: 952, smoke: false, to: 955 },   // Reaktor
+];
+
+/** Nummer des Animationsbilds (0 …) oder −1, wenn der Wert kein Animationsbild ist. */
+export function animationFrameOf(value: number): number {
+    for (const range of ANIMATION_RANGES) {
+        if (value >= range.from && value <= range.to) {
+            return (value - range.from) % range.frames;
+        }
+    }
+    return -1;
+}
+
+/** Steigt aus dieser Kachel gerade Rauch auf? */
+export function isSmoke(value: number): boolean {
+    for (const range of ANIMATION_RANGES) {
+        if (value >= range.from && value <= range.to) {
+            return range.smoke;
+        }
+    }
+    return false;
+}
+
+/** Blitz-Symbol: So markiert der AnimationManager Zonen ohne Strom (Blinken). */
+export const LIGHTNING_BOLT = 827;

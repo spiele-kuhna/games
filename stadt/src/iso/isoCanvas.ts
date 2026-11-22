@@ -16,10 +16,11 @@
  *    Zoom, Drehung oder Bau-Vorschau).
  *  - Die Bewegung der Karte erfolgt in Bildschirmrichtungen (nach oben, unten, links, rechts).
  *
- * Noch nicht enthalten (folgende Arbeitspakete): Gebäude mit Höhe (AP 3), Animationen und Fahrzeuge (AP 4),
- * Bedienung für Zoom, Drehen und Touch (AP 5), Geländehöhen (AP 8–10).
+ * Noch nicht enthalten (folgende Arbeitspakete): Bedienung für Zoom, Drehen und Touch (AP 5),
+ * Geländehöhen (AP 8–10).
  */
 
+import { AnimationManager } from "../animationManager";
 import { Position } from "../position";
 import {
     forEachTileBackToFront, GridSize, mapToView, Point, projectToScreen, Rotation, screenToView,
@@ -27,13 +28,29 @@ import {
 } from "./projection";
 import { buildingPartOf } from "./buildingTable";
 import { IsoTilePainter, PaintRequest } from "./isoPainter";
-import { describeTile, EAST, NORTH, rotateMask, SOUTH, WEST } from "./tileKinds";
+import { drawSprite, SpriteLike, spriteCentre } from "./isoSprites";
+import {
+    animationFrameOf, describeTile, EAST, isSmoke, LIGHTNING_BOLT, NORTH, rotateMask, SOUTH, trafficOf, WEST,
+} from "./tileKinds";
 
 /** Was IsoCanvas von der Karte braucht (GameMap erfüllt das). */
 interface MapLike {
     readonly width: number;
     readonly height: number;
     getTileValue(x: number, y: number): number;
+    /** Kachelwerte MIT Merkmal-Bits eines Rechtecks, zeilenweise (gameMap.js) */
+    getTileValuesForPainting(x: number, y: number, w: number, h: number, result?: number[]): number[];
+}
+
+/** Der AnimationManager (animationManager.js) ersetzt Kachelwerte durch das aktuelle Animationsbild. */
+interface AnimationLike {
+    getTiles(values: number[], offsetX: number, offsetY: number, width: number, height: number,
+             isPaused: boolean): void;
+}
+
+/** Woher die Sprites kommen (spriteManager.js). */
+interface SpriteSource {
+    getSpriteList(): SpriteLike[];
 }
 
 /** Bau-Vorschau, wie sie Game.calculateMouseForPaint() liefert. */
@@ -74,12 +91,23 @@ export class IsoCanvas {
     private lastSignature = "";
     private lastValues: number[] = [];
 
+    // Animationen: eigener AnimationManager wie in GameCanvas; animierte Werte des Karten-Rechtecks
+    private animation: AnimationLike | null = null;
+    private sprites: SpriteSource | null = null;
+    private animated: number[] = [];
+    private animatedX = 0;
+    private animatedY = 0;
+    private animatedWidth = 0;
+
     constructor(private readonly canvas: HTMLCanvasElement) {
         window.addEventListener("resize", () => { this.dimensionsChanged = true; }, false);
     }
 
-    init(map: MapLike): void {
+    init(map: MapLike, sprites?: SpriteSource): void {
         this.map = map;
+        this.sprites = sprites || null;
+        // AnimationManager ist eine JavaScript-Konstruktorfunktion; TypeScript kennt ihren Typ nicht genau.
+        this.animation = new (AnimationManager as any)(map) as AnimationLike;
         this.ready = true;
         // Nur ausmessen, nicht ins Canvas schreiben: Beim Start ist vielleicht noch die Draufsicht aktiv.
         this.measure();
@@ -218,9 +246,10 @@ export class IsoCanvas {
     // ---- Zeichnen -------------------------------------------------------------------------------------------
 
     /**
-     * Wird von Game in jedem Bild aufgerufen. Sprites zeichnen wir erst ab Arbeitspaket 4.
+     * Wird von Game in jedem Bild aufgerufen. Die Sprites, die Game mitgibt, sind nach Draufsicht-Pixeln
+     * ausgewählt; IsoCanvas holt sich deshalb selbst alle aktiven Sprites vom SpriteManager.
      */
-    paint(mouse: MouseBox | null): void {
+    paint(mouse: MouseBox | null, _sprites?: unknown, isPaused?: boolean): void {
         if (!this.ready) {
             throw new Error("Not ready!");
         }
@@ -235,10 +264,13 @@ export class IsoCanvas {
         const rect = visibleViewRect(this.canvasWidth, this.canvasHeight, 0, painter.maxHeadroom, view, size);
 
         // Hat sich seit dem letzten Bild etwas geändert? Wenn nicht, sparen wir uns das Zeichnen.
-        const values = rect === null ? [] : this.collectValues(rect, map);
+        // Kachelwerte mit Animationen (Verkehr, Rauch, Blinken …) – sie ändern sich etwa alle 50 ms
+        const values = rect === null ? [] : this.animateRect(rect, map, isPaused === true);
+        const sprites = this.activeSprites();
         const signature = [this.canvasWidth, this.canvasHeight, this.tileWidth, this.rotation, this.originX,
                            this.originY, mouse ? [mouse.x, mouse.y, mouse.width, mouse.colour].join(",") : "-",
-                           rect ? [rect.minX, rect.maxX, rect.minY, rect.maxY].join(",") : "-"].join("|");
+                           rect ? [rect.minX, rect.maxX, rect.minY, rect.maxY].join(",") : "-",
+                           sprites.map((s) => [s.type, s.frame, s.x, s.y].join(",")).join(";")].join("|");
         if (signature === this.lastSignature && this.sameValues(values)) {
             return;
         }
@@ -253,6 +285,7 @@ export class IsoCanvas {
         if (rect !== null) {
             this.drawTiles(ctx, rect, map, view, painter);
         }
+        this.drawSprites(ctx, sprites, map, view);
         if (mouse) {
             this.drawMouseBox(ctx, mouse, map, view);
         }
@@ -278,7 +311,11 @@ export class IsoCanvas {
     private paintRequestFor(vx: number, vy: number, map: MapLike): PaintRequest {
         const tile = viewToMap(vx, vy, map, this.rotation);
         const value = map.getTileValue(tile.x, tile.y);
-        const raw = describeTile(value);
+        // Animationsbild an dieser Stelle; beim Blinken stromloser Zonen ersetzt der Blitz die Mittelkachel
+        const animatedValue = this.animatedValueAt(tile.x, tile.y, value);
+        const lightning = animatedValue === LIGHTNING_BOLT;
+        const shown = lightning ? value : animatedValue;
+        const raw = describeTile(shown);
 
         // Anschlüsse aus Karten- in Ansichtsrichtungen drehen
         const look = {
@@ -309,7 +346,63 @@ export class IsoCanvas {
         }
 
         const building = raw.cover === "zone" ? buildingPartOf(value) : null;
-        return { building, landSides, look, variant: this.variantFor(tile.x, tile.y) };
+        return {
+            building,
+            frame: animationFrameOf(shown),
+            landSides,
+            lightning,
+            look,
+            smoke: isSmoke(shown),
+            traffic: trafficOf(shown),
+            variant: this.variantFor(tile.x, tile.y),
+        };
+    }
+
+    /*
+     * Animationen für den sichtbaren Bereich berechnen. Ein gedrehtes, achsenparalleles Rechteck ist auf der Karte
+     * wieder achsenparallel – deshalb können wir dem AnimationManager einfach das passende Karten-Rechteck geben.
+     * Er schaltet Animationsbilder weiter, lässt stromlose Zonen blinken und beendet abgelaufene Explosionen.
+     */
+    private animateRect(rect: ViewRect, map: MapLike, isPaused: boolean): number[] {
+        const a = viewToMap(rect.minX, rect.minY, map, this.rotation);
+        const b = viewToMap(rect.maxX, rect.maxY, map, this.rotation);
+        const x0 = Math.min(a.x, b.x);
+        const y0 = Math.min(a.y, b.y);
+        const width = Math.abs(a.x - b.x) + 1;
+        const height = Math.abs(a.y - b.y) + 1;
+
+        const values = map.getTileValuesForPainting(x0, y0, width, height, []);
+        if (this.animation !== null) {
+            this.animation.getTiles(values, x0, y0, width, height, isPaused);
+        }
+        this.animated = values;
+        this.animatedX = x0;
+        this.animatedY = y0;
+        this.animatedWidth = width;
+        return values;
+    }
+
+    private animatedValueAt(x: number, y: number, fallback: number): number {
+        const index = (y - this.animatedY) * this.animatedWidth + (x - this.animatedX);
+        const value = this.animated[index];
+        return value === undefined ? fallback : value;
+    }
+
+    /** Alle Sprites, die gerade unterwegs sind (Bild 0 heißt bei der Simulation: inaktiv). */
+    private activeSprites(): SpriteLike[] {
+        if (this.sprites === null) {
+            return [];
+        }
+        return this.sprites.getSpriteList().filter((s) => s.frame !== 0);
+    }
+
+    private drawSprites(ctx: CanvasRenderingContext2D, sprites: SpriteLike[], map: MapLike, view: ViewParams): void {
+        for (const sprite of sprites) {
+            const centre = spriteCentre(sprite);
+            const point = this.mapPointToViewPoint(centre.x, centre.y, map);
+            const ground = projectToScreen(point.x, point.y, 0, view);
+            drawSprite(ctx, sprite, ground.x, ground.y, this.tileWidth);
+        }
     }
 
     /** Feste „Zufallszahl“ 0–3 je Kartenkachel, damit Wiesen und Wasser lebendiger aussehen – auch nach Drehen. */
@@ -353,17 +446,6 @@ export class IsoCanvas {
     }
 
     // ---- Hilfsfunktionen ------------------------------------------------------------------------------------
-
-    private collectValues(rect: ViewRect, map: MapLike): number[] {
-        const values: number[] = [];
-        for (let vy = rect.minY; vy <= rect.maxY; vy++) {
-            for (let vx = rect.minX; vx <= rect.maxX; vx++) {
-                const tile = viewToMap(vx, vy, map, this.rotation);
-                values.push(map.getTileValue(tile.x, tile.y));
-            }
-        }
-        return values;
-    }
 
     private sameValues(values: number[]): boolean {
         if (values.length !== this.lastValues.length) {
