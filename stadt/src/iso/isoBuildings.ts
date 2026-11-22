@@ -81,16 +81,23 @@ interface Pylon { kind: "pylon"; u: number; v: number; height: number; }
 interface Mast { kind: "mast"; u: number; v: number; height: number; base: number; }
 /** Fahnenmast mit Fahne */
 interface Flag { kind: "flag"; u: number; v: number; height: number; base: number; colour: string; }
+/** Containerstapel: Reihen × Spalten Container, levels hoch, Farben aus seed */
+interface ContainerStack { kind: "containerStack"; u0: number; v0: number; u1: number; v1: number; rows: number;
+                           cols: number; levels: number; seed: number; }
+/** Containerbrücke: Portal auf vier Beinen mit Ausleger und Laufkatze */
+interface GantryCrane { kind: "gantryCrane"; u: number; v: number; height: number; du: number; dv: number; }
+/** Poller an der Kaikante */
+interface Bollard { kind: "bollard"; u: number; v: number; }
 /** Wasserturm: Behälter auf vier Stützen */
 interface WaterTank { kind: "waterTank"; u: number; v: number; height: number; }
 /** Förderband zwischen zwei Punkten (mit Höhe) */
 interface Conveyor { kind: "conveyor"; u0: number; v0: number; z0: number; u1: number; v1: number; z1: number; }
 
 type Item = Box | Tank | Tree | Chimney | Pile | CoolingTower | Dome | Vehicle | Sign | ControlTower | Pylon | Mast |
-            Flag | Conveyor | WaterTank;
+            Flag | Conveyor | WaterTank | ContainerStack | GantryCrane | Bollard;
 
 type Ground = "none" | "parking" | "field" | "runway" | "garden" | "apron" | "yard" | "playground" | "plaza" |
-              "gravel";
+              "gravel" | "quay";
 
 /** Alles, was auf einer Gebäudekachel gezeichnet wird. */
 interface TileDesign {
@@ -664,6 +671,44 @@ function nuclearPlant(part: BuildingPart, none: TileDesign, seed: number): TileD
 }
 
 /*
+ * Hafen (4 × 4): rechts die Kaikante mit Pollern und zwei Containerbrücken, in der Mitte Containerstapel in Reihen
+ * mit Fahrgassen, links Lagerhallen und ein Verwaltungsgebäude, dazu ein Portalhubwagen.
+ */
+function port(part: BuildingPart, none: TileDesign, seed: number): TileDesign {
+    const { dx, dy } = part;
+    const lot = "#8f9499";
+    if (dx === 3) {
+        // Kaikante: Containerbrücken auf den oberen zwei Kacheln, Poller entlang der Kante
+        const items: Item[] = [{ kind: "bollard", u: 0.9, v: 0.2 }, { kind: "bollard", u: 0.9, v: 0.7 }];
+        if (dy <= 1) {
+            items.push({ du: 1, dv: 0, height: 0.95, kind: "gantryCrane", u: 0.55, v: 0.5 });   // Ausleger nach +x
+        } else {
+            items.push({ cols: 2, kind: "containerStack", levels: 2, rows: 3, seed: seed + 3, u0: 0.12, u1: 0.62,
+                         v0: 0.12, v1: 0.88 });
+        }
+        return { ...none, ground: "quay", items, lot };
+    }
+    if (dx === 0) {
+        if (dy === 0) {
+            return { ...none, lot, items: [box(0.1, 0.12, 0.9, 0.88, 0.34, "#d9dde0", "#7d858c", "parapet", "office",
+                                               { rooftop: "antenna" }),
+                                           { base: 0.34, colour: "#2c7fb8", height: 0.2, kind: "flag", u: 0.3, v: 0.3 }] };
+        }
+        // Lagerhallen über die linke Spalte
+        return { ...none, lot, items: [box(0.06, dy === 1 ? 0.08 : 0, 0.94, dy === 3 ? 0.92 : 1, 0.3, "#a4a9ae",
+                                           "#6d7378", "gableV", "garage")] };
+    }
+    // Containerlager mit Fahrgassen; auf einer Kachel ein Portalhubwagen
+    const items: Item[] = [{ cols: 2, kind: "containerStack", levels: 1 + ((dx + dy + seed) % 3), rows: 3,
+                             seed: seed + dx * 5 + dy, u0: 0.1, u1: 0.9, v0: 0.12, v1: 0.88 }];
+    if (dx === 2 && dy === 2) {
+        items.length = 0;
+        items.push({ kind: "vehicle", type: "van", colour: "#e5b21c", u: 0.5, v: 0.5, along: "v" });
+    }
+    return { ...none, ground: "yard", items, lot };
+}
+
+/*
  * Flughafen (6 × 6): Terminal mit Glasfront, Kontrollturm, Radar, Hangars, Vorfeld mit geparkten
  * Flugzeugen und eine Start- und Landebahn über die ganze Breite.
  */
@@ -724,10 +769,7 @@ function designFor(part: BuildingPart, variant: number): TileDesign {
         case "nuclear":
             return nuclearPlant(part, none, seed);
         case "port":
-            return { ...none, lot: "#8a8f94",
-                     extra: part.dx === 3 && part.dy === 0 ? "crane" : (part.dx + part.dy) % 2 === 0 ? "containers" : "none",
-                     items: part.dx === 0 && part.dy >= 2
-                         ? [box(0.05, 0.05, 0.95, 0.95, 0.22, "#a4a9ae", "#6d7378", "gableU", "garage")] : [] };
+            return port(part, none, seed);
         case "airport":
             return airport(part, none);
         case "stadium": {
@@ -796,6 +838,18 @@ function rotateItem(item: Item, rotation: number): Item {
             const along = item.along || "u";
             return { ...item, along: odd ? (along === "u" ? "v" : "u") : along, u: p.u, v: p.v };
         }
+        case "containerStack": {
+            const a = mapLocalToView(item.u0, item.v0, rotation);
+            const b = mapLocalToView(item.u1, item.v1, rotation);
+            return { ...item, cols: odd ? item.rows : item.cols, rows: odd ? item.cols : item.rows,
+                     u0: Math.min(a.u, b.u), u1: Math.max(a.u, b.u), v0: Math.min(a.v, b.v), v1: Math.max(a.v, b.v) };
+        }
+        case "gantryCrane": {
+            const p = mapLocalToView(item.u, item.v, rotation);
+            // Richtung drehen: Differenz zweier gedrehter Punkte
+            const q = mapLocalToView(item.u + item.du, item.v + item.dv, rotation);
+            return { ...item, du: q.u - p.u, dv: q.v - p.v, u: p.u, v: p.v };
+        }
         default: {
             const p = mapLocalToView(item.u, item.v, rotation);
             return { ...item, u: p.u, v: p.v };
@@ -831,6 +885,12 @@ export function requiredHeadroom(part: BuildingPart, tileWidth: number, variant 
                 break;
             case "waterTank":
                 height = Math.max(height, item.height + 0.2);
+                break;
+            case "gantryCrane":
+                height = Math.max(height, item.height + 0.1);
+                break;
+            case "containerStack":
+                height = Math.max(height, item.levels * 0.08 + 0.05);
                 break;
         }
     }
@@ -1248,7 +1308,67 @@ function drawItem(ctx: CanvasRenderingContext2D, g: LocalGeometry, item: Item): 
         case "flag": drawFlag(ctx, g, item); break;
         case "conveyor": drawConveyor(ctx, g, item); break;
         case "waterTank": drawWaterTank(ctx, g, item); break;
+        case "containerStack": drawContainerStack(ctx, g, item); break;
+        case "gantryCrane": drawGantryCrane(ctx, g, item); break;
+        case "bollard":
+            drawCylinder(ctx, g, item.u, item.v, 0.03, 0, g.tileWidth * 0.04, "#3d3d3b");
+            break;
     }
+}
+
+/** Containerstapel: von hinten nach vorn, unten nach oben; Farben fest aus seed (wie Reederei-Farben) */
+function drawContainerStack(ctx: CanvasRenderingContext2D, g: LocalGeometry, s: ContainerStack): void {
+    const colours = ["#c0392b", "#2c7fb8", "#e1a33b", "#27ae60", "#8e44ad", "#d35400", "#7f8c8d", "#16a085"];
+    const w = g.tileWidth;
+    const cellU = (s.u1 - s.u0) / s.cols;
+    const cellV = (s.v1 - s.v0) / s.rows;
+    for (let c = 0; c < s.cols; c++) {
+        for (let r = 0; r < s.rows; r++) {
+            const u0 = s.u0 + c * cellU + 0.02;
+            const v0 = s.v0 + r * cellV + 0.015;
+            const height = 1 + Math.floor(rnd(s.seed, c * 7 + r) * s.levels);
+            for (let level = 0; level < height; level++) {
+                drawSmallBox(ctx, g, u0, v0, u0 + cellU - 0.04, v0 + cellV - 0.03, level * w * 0.08, w * 0.075,
+                             pick(colours, s.seed, c * 31 + r * 7 + level));
+            }
+        }
+    }
+}
+
+/** Containerbrücke: zwei Beinpaare, oben ein Querträger, langer Ausleger übers Wasser (Richtung du, dv), Laufkatze */
+function drawGantryCrane(ctx: CanvasRenderingContext2D, g: LocalGeometry, c: GantryCrane): void {
+    const w = g.tileWidth;
+    const h = c.height * w;
+    // a = entlang des Auslegers, b = quer dazu
+    const P = (a: number, b: number, z: number) => g.localToScreen(c.u + a * c.du - b * c.dv, c.v + a * c.dv + b * c.du, z);
+    const line = (from: { x: number, y: number }, to: { x: number, y: number }) => {
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(to.x, to.y);
+    };
+    ctx.strokeStyle = "#d9822b";
+    ctx.lineWidth = Math.max(1.5, w / 30);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    for (const [a, b] of [[-0.25, -0.3], [-0.25, 0.3], [0.2, -0.3], [0.2, 0.3]]) {
+        line(P(a, b, 0), P(a, b, h * 0.75));
+    }
+    for (const b of [-0.3, 0.3]) { line(P(-0.45, b, h * 0.75), P(0.4, b, h * 0.75)); }
+    for (const a of [-0.25, 0.2]) { line(P(a, -0.3, h * 0.75), P(a, 0.3, h * 0.75)); }
+    const apex = P(-0.05, 0, h);
+    for (const [a, b] of [[-0.45, -0.3], [0.4, -0.3], [-0.45, 0.3], [0.4, 0.3]]) { line(apex, P(a, b, h * 0.75)); }
+    ctx.stroke();
+    // Laufkatze und Container am Seil, draußen über dem Wasser
+    const hook = P(0.32, 0, h * 0.73);
+    const load = P(0.32, 0, h * 0.35);
+    ctx.strokeStyle = "#333";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    line(hook, load);
+    ctx.stroke();
+    const cu = c.u + 0.32 * c.du;
+    const cv = c.v + 0.32 * c.dv;
+    drawSmallBox(ctx, g, cu - 0.08, cv - 0.08, cu + 0.08, cv + 0.08, h * 0.73, w * 0.05, "#5c5c5a");
+    drawSmallBox(ctx, g, cu - 0.07, cv - 0.07, cu + 0.07, cv + 0.07, h * 0.28, w * 0.07, "#2c7fb8");
 }
 
 /** Wasserturm: vier Stützen, darauf ein runder Behälter mit blauem Band und flacher Kuppel */
@@ -1584,6 +1704,7 @@ function depthOf(item: Item): number {
         case "sign": return 9;   // Schilder zuletzt, damit sie oben liegen
         case "mast": case "flag": return item.base > 0 ? 8 : item.u + item.v;
         case "conveyor": return Math.max(item.u0 + item.v0, item.u1 + item.v1);
+        case "containerStack": return item.u1 + item.v1;
         default: return item.u + item.v;
     }
 }
@@ -1663,6 +1784,13 @@ function drawGroundMarks(ctx: CanvasRenderingContext2D, g: LocalGeometry, design
             for (let i = 0; i < 6; i++) {
                 const a = 0.05 + i * 0.16;
                 polygon(ctx, [p(a, 0.05), p(a + 0.08, 0.05), p(a + 0.08, 0.95), p(a, 0.95)], "rgba(255, 255, 255, 0.12)");
+            }
+            break;
+        case "quay":
+            polygon(ctx, [p(0.86, 0), p(1, 0), p(1, 1), p(0.86, 1)], "#6d7277");          // Kaimauer
+            polygon(ctx, [p(0.97, 0), p(1, 0), p(1, 1), p(0.97, 1)], "#2b2b2b");          // Fenderleiste
+            for (const u of [0.25, 0.75]) {                                                // Kranschienen
+                polygon(ctx, [p(u, 0), p(u + 0.012, 0), p(u + 0.012, 1), p(u, 1)], "#4a4a48");
             }
             break;
         case "gravel":

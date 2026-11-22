@@ -44,6 +44,10 @@ interface WaterSourceLike {
     kindAt(x: number, y: number): number;
 }
 
+/** Ansteigende Brücken: größte Höhe (Rautenbreiten) und Länge der Rampe (Kacheln) */
+const BRIDGE_HEIGHT = 0.32;
+const BRIDGE_RAMP = 1.5;
+
 /** Eine Umdrehung des Radars am Flughafen in Millisekunden */
 const RADAR_TURN_MS = 4000;
 
@@ -435,6 +439,7 @@ export class IsoCanvas {
             traffic: this.trafficFor(shown, raw.roads !== 0, tile.x, tile.y),
             variant,
             water: this.waterLookFor(tile.x, tile.y, building),
+            bridgeHeights: raw.bridge && raw.roads !== 0 ? this.bridgeHeightsFor(tile.x, tile.y, raw.roads, map) : null,
         };
     }
 
@@ -528,6 +533,43 @@ export class IsoCanvas {
             return null;
         }
         return { flowing: false, kind: 2, noWater: true, pipes: -1, supplied: false, underground: false };
+    }
+
+    /*
+     * Dorfplaner: ansteigende Brücke. Wir zählen, wie viele Brückenkacheln vor und hinter dieser liegen (in
+     * Kartenrichtung), und bestimmen daraus die Höhe der Fahrbahn an beiden Kanten: vom Ufer aus über
+     * BRIDGE_RAMP Kacheln ansteigend bis BRIDGE_HEIGHT, dann flach, am anderen Ende wieder abfallend.
+     * Die Höhen werden zum Schluss in Ansichtsrichtungen gedreht.
+     */
+    private bridgeHeightsFor(x: number, y: number, mapRoads: number, map: MapLike) {
+        const vertical = (mapRoads & (NORTH | SOUTH)) !== 0;
+        const dx = vertical ? 0 : 1;
+        const dy = vertical ? 1 : 0;
+        const isBridge = (tx: number, ty: number) => tx >= 0 && ty >= 0 && tx < map.width && ty < map.height &&
+            describeTile(map.getTileValue(tx, ty)).bridge;
+        let before = 0;
+        while (isBridge(x - dx * (before + 1), y - dy * (before + 1))) { before++; }
+        let after = 0;
+        while (isBridge(x + dx * (after + 1), y + dy * (after + 1))) { after++; }
+        const length = before + after + 1;
+        const height = (k: number) => BRIDGE_HEIGHT * Math.min(1, k / BRIDGE_RAMP, (length - k) / BRIDGE_RAMP);
+        const start = Math.round(height(before) * 100) / 100;      // Kante zur kleineren Koordinate
+        const end = Math.round(height(before + 1) * 100) / 100;    // Kante zur größeren Koordinate
+        // Kartenkanten: Norden/Westen = start, Süden/Osten = end; dann in die Ansicht drehen
+        const byMapDirection: { [d: number]: number } = vertical ? { [NORTH]: start, [SOUTH]: end }
+                                                                 : { [WEST]: start, [EAST]: end };
+        const result = { east: 0, north: 0, south: 0, west: 0 };
+        for (const d of [NORTH, EAST, SOUTH, WEST]) {
+            if (byMapDirection[d] === undefined) {
+                continue;
+            }
+            const viewDirection = rotateMask(d, this.rotation);
+            if (viewDirection === NORTH) { result.north = byMapDirection[d]; }
+            if (viewDirection === EAST) { result.east = byMapDirection[d]; }
+            if (viewDirection === SOUTH) { result.south = byMapDirection[d]; }
+            if (viewDirection === WEST) { result.west = byMapDirection[d]; }
+        }
+        return result;
     }
 
     /** Feste „Zufallszahl“ 0–3 je Kartenkachel, damit Wiesen und Wasser lebendiger aussehen – auch nach Drehen. */

@@ -102,6 +102,16 @@ export interface PaintRequest {
     readonly lightning: boolean;
     /** Dorfplaner: Wasserversorgung */
     readonly water?: WaterLook | null;
+    /** Dorfplaner: Höhe der Brückenfahrbahn an den Kachelkanten (Ansichtsrichtungen, in Rautenbreiten) */
+    readonly bridgeHeights?: BridgeHeights | null;
+}
+
+/** Höhe einer ansteigenden Brücke an den vier Kachelkanten (nur die Kanten mit Fahrbahn zählen) */
+export interface BridgeHeights {
+    readonly north: number;
+    readonly east: number;
+    readonly south: number;
+    readonly west: number;
 }
 
 /** Dorfplaner: Wasserversorgung auf einer Kachel (null = nichts zu zeigen) */
@@ -170,7 +180,10 @@ export class IsoTilePainter {
                      b || look.zone === "park" ? [b ? [b.zone, b.size, b.dx, b.dy, b.level, b.value].join(",") : "park",
                                                   request.rotation].join(",") : "-",
                      request.traffic.level, request.traffic.frame, request.frame, request.smoke,
-                     request.lightning, waterKey(request.water)].join("|");
+                     request.lightning, waterKey(request.water),
+                     request.bridgeHeights ? [request.bridgeHeights.north, request.bridgeHeights.east,
+                                              request.bridgeHeights.south, request.bridgeHeights.west].join(",")
+                                           : "-"].join("|");
         let image = this.cache[key];
         if (!image) {
             image = this.renderImage(request);
@@ -207,7 +220,10 @@ export class IsoTilePainter {
         } else {
             this.drawCover(ctx, look, request.variant, request.frame);
         }
-        if (look.roads !== 0) {
+        if (look.roads !== 0 && look.bridge && request.bridgeHeights) {
+            // ansteigende Brücke: Fahrbahn auf Pfeilern über dem Wasser (Autos fahren dort nicht sichtbar)
+            this.drawElevatedBridge(ctx, look.roads, request.bridgeHeights);
+        } else if (look.roads !== 0) {
             this.drawRoads(ctx, look.roads, look.bridge);
             if (request.traffic.level > 0) { this.drawCars(ctx, look.roads, request.traffic); }
         }
@@ -589,16 +605,157 @@ export class IsoTilePainter {
         this.forEachDirection(mask, (d) => this.fillArm(ctx, d, 0.32, 0.68, surface));
         this.fillLocalRect(ctx, 0.32, 0.32, 0.68, 0.68, surface);
 
-        // Mittellinie als kurze Striche, nicht auf Kreuzungen
-        const isStraight = mask === (NORTH | SOUTH) || mask === (EAST | WEST);
-        if (isStraight) {
+        this.drawLaneMarks(ctx, mask);
+    }
+
+    /*
+     * Fahrbahnmarkierungen:
+     *  - gerade Straße: Mittellinie als Striche über die ganze Kachel
+     *  - Kurve und Sackgasse: Striche auf jedem Arm bis zur Mitte
+     *  - Einmündung und Kreuzung: Striche auf den Armen, davor Zebrastreifen; die Kreuzungsfläche bleibt frei
+     */
+    private drawLaneMarks(ctx: CanvasRenderingContext2D, mask: number, lift = 0): void {
+        const mark = COLOURS.laneMark;
+        // Rechteck auf einem Arm: t0..t1 vom Kachelrand (0) zur Mitte (0,5), w0..w1 quer dazu
+        const armRect = (d: number, t0: number, t1: number, w0: number, w1: number, colour: string) => {
+            switch (d) {
+                case NORTH: this.fillLiftedRect(ctx, w0, t0, w1, t1, lift, colour); break;
+                case SOUTH: this.fillLiftedRect(ctx, w0, 1 - t1, w1, 1 - t0, lift, colour); break;
+                case EAST: this.fillLiftedRect(ctx, 1 - t1, w0, 1 - t0, w1, lift, colour); break;
+                case WEST: this.fillLiftedRect(ctx, t0, w0, t1, w1, lift, colour); break;
+            }
+        };
+        let arms = 0;
+        this.forEachDirection(mask, () => arms++);
+
+        if (mask === (NORTH | SOUTH) || mask === (EAST | WEST)) {
             const alongU = mask === (EAST | WEST);
             for (const start of [0.08, 0.42, 0.76]) {
                 if (alongU) {
-                    this.fillLocalRect(ctx, start, 0.485, start + 0.16, 0.515, COLOURS.laneMark);
+                    this.fillLiftedRect(ctx, start, 0.485, start + 0.16, 0.515, lift, mark);
                 } else {
-                    this.fillLocalRect(ctx, 0.485, start, 0.515, start + 0.16, COLOURS.laneMark);
+                    this.fillLiftedRect(ctx, 0.485, start, 0.515, start + 0.16, lift, mark);
                 }
+            }
+            return;
+        }
+        if (arms <= 2) {
+            // Kurve oder Sackgasse: Mittellinie auf jedem Arm, in der Mitte zusammengeführt
+            this.forEachDirection(mask, (d) => {
+                armRect(d, 0.06, 0.2, 0.485, 0.515, mark);
+                armRect(d, 0.3, 0.515, 0.485, 0.515, mark);
+            });
+            return;
+        }
+        // Einmündung oder Kreuzung
+        this.forEachDirection(mask, (d) => {
+            armRect(d, 0.03, 0.13, 0.485, 0.515, mark);
+            for (let w = 0.34; w < 0.66; w += 0.065) {
+                armRect(d, 0.19, 0.29, w, w + 0.035, "rgba(255, 255, 255, 0.85)");
+            }
+        });
+    }
+
+    /** Wie fillLocalRect, aber in der Höhe lift (Pixel) – für Markierungen auf Brücken */
+    private fillLiftedRect(ctx: CanvasRenderingContext2D, u0: number, v0: number, u1: number, v1: number,
+                           lift: number, colour: string): void {
+        const corners = [this.localToScreen(u0, v0, lift), this.localToScreen(u1, v0, lift),
+                         this.localToScreen(u1, v1, lift), this.localToScreen(u0, v1, lift)];
+        ctx.beginPath();
+        ctx.moveTo(corners[0].x, corners[0].y);
+        for (let i = 1; i < corners.length; i++) {
+            ctx.lineTo(corners[i].x, corners[i].y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = colour;
+        ctx.fill();
+    }
+
+    /*
+     * Ansteigende Brücke: Die Fahrbahn liegt an jeder Kachelkante in der angegebenen Höhe und verläuft dazwischen
+     * gerade. Unter der Mitte steht ein Pfeiler. So steigt die Brücke vom Ufer aus an, damit Schiffe darunter
+     * hindurchpassen, und senkt sich am anderen Ufer wieder ab.
+     */
+    private drawElevatedBridge(ctx: CanvasRenderingContext2D, mask: number, heights: BridgeHeights): void {
+        const tw = this.tileWidth;
+        const edgeHeight = (d: number) => tw * (d === NORTH ? heights.north : d === EAST ? heights.east
+                                              : d === SOUTH ? heights.south : heights.west);
+        const dirs: number[] = [];
+        this.forEachDirection(mask, (d) => dirs.push(d));
+        const centre = dirs.reduce((sum, d) => sum + edgeHeight(d), 0) / Math.max(1, dirs.length);
+        const thickness = tw * 0.05;
+        const p = (u: number, v: number, z: number) => this.localToScreen(u, v, z);
+        const poly = (points: ScreenPoint[], colour: string) => {
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) { ctx.lineTo(points[i].x, points[i].y); }
+            ctx.closePath();
+            ctx.fillStyle = colour;
+            ctx.fill();
+        };
+
+        // Pfeiler unter der Mitte
+        if (centre > thickness) {
+            const a = 0.42;
+            const b = 0.58;
+            poly([p(b, a, 0), p(b, b, 0), p(b, b, centre - thickness), p(b, a, centre - thickness)], "#8d8f93");
+            poly([p(a, b, 0), p(b, b, 0), p(b, b, centre - thickness), p(a, b, centre - thickness)], "#a9abaf");
+        }
+
+        // Fahrbahnplatte je Arm: von der Mitte (Höhe centre) zur Kante (Höhe des Arms)
+        const lo = 0.26;
+        const hi = 0.74;
+        const deck = (d: number) => {
+            const h = edgeHeight(d);
+            // Eckpunkte (u, v, z) der Oberseite
+            let top: Array<[number, number, number]>;
+            switch (d) {
+                case NORTH: top = [[lo, 0, h], [hi, 0, h], [hi, 0.5, centre], [lo, 0.5, centre]]; break;
+                case SOUTH: top = [[lo, 0.5, centre], [hi, 0.5, centre], [hi, 1, h], [lo, 1, h]]; break;
+                case EAST: top = [[0.5, lo, centre], [1, lo, h], [1, hi, h], [0.5, hi, centre]]; break;
+                default: top = [[0, lo, h], [0.5, lo, centre], [0.5, hi, centre], [0, hi, h]]; break;
+            }
+            // sichtbare Seitenfläche (rechte bzw. vordere Kante)
+            const side = d === NORTH || d === SOUTH ? top.filter((c) => c[0] === hi) : top.filter((c) => c[1] === hi);
+            if (side.length === 2) {
+                poly([p(side[0][0], side[0][1], side[0][2]), p(side[1][0], side[1][1], side[1][2]),
+                      p(side[1][0], side[1][1], side[1][2] - thickness), p(side[0][0], side[0][1], side[0][2] - thickness)],
+                     "#6c6f74");
+            }
+            poly(top.map((c) => p(c[0], c[1], c[2])), COLOURS.bridgeDeck);
+        };
+        dirs.forEach(deck);
+
+        // Geländer als Linien an beiden Seiten
+        ctx.strokeStyle = COLOURS.bridgeRail;
+        ctx.lineWidth = Math.max(1, tw / 48);
+        for (const d of dirs) {
+            const h = edgeHeight(d) + tw * 0.04;
+            const c = centre + tw * 0.04;
+            for (const w of [lo, hi]) {
+                const a = d === NORTH ? p(w, 0, h) : d === SOUTH ? p(w, 1, h) : d === EAST ? p(1, w, h) : p(0, w, h);
+                const b = d === NORTH || d === SOUTH ? p(w, 0.5, c) : p(0.5, w, c);
+                ctx.beginPath();
+                ctx.moveTo(a.x, a.y);
+                ctx.lineTo(b.x, b.y);
+                ctx.stroke();
+            }
+        }
+
+        // Mittellinie auf der schrägen Fahrbahn (Striche, je Arm)
+        for (const d of dirs) {
+            const h = edgeHeight(d);
+            for (const [t0, t1] of [[0.08, 0.22], [0.32, 0.46]]) {
+                const z0 = h + (centre - h) * (t0 / 0.5) + 0.5;
+                const z1 = h + (centre - h) * (t1 / 0.5) + 0.5;
+                let q: ScreenPoint[];
+                switch (d) {
+                    case NORTH: q = [p(0.485, t0, z0), p(0.515, t0, z0), p(0.515, t1, z1), p(0.485, t1, z1)]; break;
+                    case SOUTH: q = [p(0.485, 1 - t0, z0), p(0.515, 1 - t0, z0), p(0.515, 1 - t1, z1), p(0.485, 1 - t1, z1)]; break;
+                    case EAST: q = [p(1 - t0, 0.485, z0), p(1 - t0, 0.515, z0), p(1 - t1, 0.515, z1), p(1 - t1, 0.485, z1)]; break;
+                    default: q = [p(t0, 0.485, z0), p(t0, 0.515, z0), p(t1, 0.515, z1), p(t1, 0.485, z1)]; break;
+                }
+                poly(q, COLOURS.laneMark);
             }
         }
     }
