@@ -99,7 +99,7 @@ Spiels. Angaben ohne Quelle sind als „Kenntnis, nicht belegt“ markiert.
 | Senkrechte Werkzeugleiste mit Symbolen, Untermenüs je Gruppe (Straße/Schiene, Zonen, Versorgung, Notdienste …) | 20 Textknöpfe | **ja** – eigene Symbole zeichnen |
 | Karte mit Maus ziehen / Bildlaufleisten / Klick auf Übersichtskarte | nur Tastatur | **ja** |
 | Zonen als beliebig große Fläche aufziehen; Gebäude wachsen in unterschiedlicher Größe (1×1 bis 3×3) | feste 3×3-Zonen | **nein** – das ist ein anderes Zonenmodell in der Simulation |
-| Tempostufen (Pause, langsam, mittel, schnell) | Pause/Weiter | **ja** – Simulation kennt bereits Pause/langsam/mittel/schnell (`simulation.js:135` `setSpeed`); fehlt nur in der Bedienung |
+| Tempostufen (Pause, langsam, mittel, schnell) | Pause-Knopf; Tempo langsam/mittel/schnell im Fenster *Settings* | **ja** – `simulation.js:135` `setSpeed`; nur besser erreichbar machen (Menü) |
 | Übersichtskarte mit Einblendungen (Verschmutzung, Kriminalität, Bodenwert, Verkehr) | – | **ja** – Daten liegen in `blockMaps`, werden nur gelesen |
 | Wasserversorgung, Verordnungen, Anleihen, Nachbarstädte, Arkologien | – | **nein** – neue Simulationsteile |
 | Touch | – | im Vorbild nicht vorhanden; für unser iPad-Ziel **neu nötig** |
