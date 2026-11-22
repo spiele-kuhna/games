@@ -80,9 +80,12 @@ function Game(gameMap, tileSet, snowTileSet, spriteSheet, difficulty, name) {
   var isoCanvas = new IsoCanvas(document.getElementById(GameCanvas.DEFAULT_ID));
   isoCanvas.init(this.gameMap, this.simulation.spriteManager, this.simulation.blockMaps.trafficDensityMap);
   this.gameCanvas = new ViewSwitcher(topCanvas, isoCanvas);
+  // Dorfplaner: beide Ansichten zeigen Rohre und fehlendes Wasser
+  this.gameCanvas.setWaterSource(this.simulation.waterManager);
   this.gameCanvas.setMode(ViewSwitcher.loadPreference());
   this.setupViewControls();
-  this.inputStatus = new InputStatus(this.gameMap, tileSet.tileWidth);
+  this.inputStatus = new InputStatus(this.gameMap, tileSet.tileWidth, this.simulation.waterManager);
+  this.setupUnderground();
   // Dorfplaner: Maus und Finger auf der Karte wirken auf die gerade aktive Ansicht
   this.inputStatus.setView(this.gameCanvas);
 
@@ -264,6 +267,44 @@ function Game(gameMap, tileSet, snowTileSet, spriteSheet, difficulty, name) {
 
 
 // Dorfplaner: Knopf und Taste V schalten zwischen Draufsicht und Isometrie um.
+/*
+ * Dorfplaner: Untergrundansicht für die Wasserrohre.
+ * Sie schaltet sich beim Rohr-, Pumpen- und Turmwerkzeug ein und bei anderen Werkzeugen wieder aus; mit der
+ * Planierraupe bleibt sie, wie sie ist (dann entfernt die Planierraupe Rohre). Knopf und Taste U schalten von Hand.
+ */
+Game.prototype.setupUnderground = function() {
+  var self = this;
+  var waterTools = ['pipe', 'pump', 'waterTower'];
+
+  this.setUnderground = function(on) {
+    self.gameCanvas.setUnderground(on);
+    self.inputStatus.gameTools.bulldozer.setUnderground(on);
+    $('#undergroundToggle').attr('aria-pressed', on ? 'true' : 'false');
+  };
+
+  this.inputStatus.onToolChanged = function(name) {
+    if (waterTools.indexOf(name) !== -1)
+      self.setUnderground(true);
+    else if (name !== 'bulldozer' && name !== 'query')
+      self.setUnderground(false);
+  };
+
+  $('#undergroundToggle').click(function(e) {
+    e.preventDefault();
+    self.setUnderground(!self.gameCanvas.underground);
+  });
+
+  $(document).keydown(function(e) {
+    if (self.dialogOpen || $(e.target).is('input, textarea, select'))
+      return;
+    if (e.key === 'u' || e.key === 'U') {
+      self.setUnderground(!self.gameCanvas.underground);
+      e.preventDefault();
+    }
+  });
+};
+
+
 Game.prototype.setupViewControls = function() {
   var updateLabel = function() {
     var iso = this.gameCanvas.isIsometric();

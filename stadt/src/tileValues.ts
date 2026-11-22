@@ -315,7 +315,11 @@ export const CHURCH7BASE    = 1010;
 export const CHURCH7        = 1014;
 export const CHURCH7LAST    = 1018;
 
-// tiles 1020-1023 unused
+// Dorfplaner: Wasserversorgung (die Kacheln 1020 und 1021 waren im Original frei)
+export const PUMP           = 1020;
+export const WATER_TOWER    = 1021;
+
+// tiles 1022-1023 unused
 
 export const TILE_COUNT     = 1024;
 

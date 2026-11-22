@@ -81,11 +81,13 @@ interface Pylon { kind: "pylon"; u: number; v: number; height: number; }
 interface Mast { kind: "mast"; u: number; v: number; height: number; base: number; }
 /** Fahnenmast mit Fahne */
 interface Flag { kind: "flag"; u: number; v: number; height: number; base: number; colour: string; }
+/** Wasserturm: Behälter auf vier Stützen */
+interface WaterTank { kind: "waterTank"; u: number; v: number; height: number; }
 /** Förderband zwischen zwei Punkten (mit Höhe) */
 interface Conveyor { kind: "conveyor"; u0: number; v0: number; z0: number; u1: number; v1: number; z1: number; }
 
 type Item = Box | Tank | Tree | Chimney | Pile | CoolingTower | Dome | Vehicle | Sign | ControlTower | Pylon | Mast |
-            Flag | Conveyor;
+            Flag | Conveyor | WaterTank;
 
 type Ground = "none" | "parking" | "field" | "runway" | "garden" | "apron" | "yard" | "playground" | "plaza" |
               "gravel";
@@ -738,6 +740,17 @@ function designFor(part: BuildingPart, variant: number): TileDesign {
         case "park":
             return { ...none, extra: "fountain", ground: "garden", lot: LOT_GRASS,
                      items: [tree(0.2, 0.25, 0.8), tree(0.8, 0.75, 0.7, true)] };
+        case "pump":
+            // Pumpenhaus mit Satteldach, daneben das blaue Rohr mit Schieber
+            return { ...none, lot: "#a7a297", items: [
+                box(0.14, 0.18, 0.66, 0.74, 0.22, "#5b7fa3", "#3f5f80", "gableU", "hall"),
+                box(0.66, 0.42, 0.96, 0.54, 0.06, "#2f8cff", "#5aa9ff", "flat", "none"),
+                { colour: "#2f8cff", height: 0.14, kind: "tank", radius: 0.07, u: 0.82, v: 0.48 },
+                { colour: "#c0392b", height: 0.03, kind: "tank", radius: 0.06, u: 0.82, v: 0.48 },
+            ] };
+        case "waterTower":
+            return { ...none, lot: LOT_GRASS, items: [{ height: 0.8, kind: "waterTank", u: 0.5, v: 0.5 },
+                                                      tree(0.15, 0.85, 0.7)] };
     }
     return none;
 }
@@ -815,6 +828,9 @@ export function requiredHeadroom(part: BuildingPart, tileWidth: number, variant 
                 break;
             case "conveyor":
                 height = Math.max(height, Math.max(item.z0, item.z1) + 0.1);
+                break;
+            case "waterTank":
+                height = Math.max(height, item.height + 0.2);
                 break;
         }
     }
@@ -1231,7 +1247,41 @@ function drawItem(ctx: CanvasRenderingContext2D, g: LocalGeometry, item: Item): 
         case "mast": drawMast(ctx, g, item); break;
         case "flag": drawFlag(ctx, g, item); break;
         case "conveyor": drawConveyor(ctx, g, item); break;
+        case "waterTank": drawWaterTank(ctx, g, item); break;
     }
+}
+
+/** Wasserturm: vier Stützen, darauf ein runder Behälter mit blauem Band und flacher Kuppel */
+function drawWaterTank(ctx: CanvasRenderingContext2D, g: LocalGeometry, item: WaterTank): void {
+    const w = g.tileWidth;
+    const legTop = item.height * 0.6 * w;
+    ctx.strokeStyle = "#6b6b68";
+    ctx.lineWidth = Math.max(1.5, w / 50);
+    ctx.beginPath();
+    for (const [du, dv] of [[-0.2, -0.2], [0.2, -0.2], [0.2, 0.2], [-0.2, 0.2]]) {
+        const foot = g.localToScreen(item.u + du, item.v + dv, 0);
+        const top = g.localToScreen(item.u + du * 0.8, item.v + dv * 0.8, legTop);
+        ctx.moveTo(foot.x, foot.y);
+        ctx.lineTo(top.x, top.y);
+    }
+    // Querstreben
+    const a = g.localToScreen(item.u - 0.18, item.v + 0.18, legTop * 0.5);
+    const b = g.localToScreen(item.u + 0.18, item.v + 0.18, legTop * 0.5);
+    const c = g.localToScreen(item.u + 0.18, item.v - 0.18, legTop * 0.5);
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.lineTo(c.x, c.y);
+    ctx.stroke();
+    drawCylinder(ctx, g, item.u, item.v, 0.06, 0, legTop, "#8d8d8a");                       // Steigrohr
+    drawCylinder(ctx, g, item.u, item.v, 0.28, legTop, item.height * 0.4 * w, "#d7dde3");    // Behälter
+    drawCylinder(ctx, g, item.u, item.v, 0.285, legTop + item.height * 0.14 * w, item.height * 0.1 * w, "#2f8cff");
+    const top = g.localToScreen(item.u, item.v, item.height * w);
+    const rx = 0.28 * w * 0.71;
+    ctx.beginPath();
+    ctx.ellipse(top.x, top.y, rx, rx * 0.35, 0, Math.PI, 0);
+    ctx.ellipse(top.x, top.y, rx, rx / 2, 0, 0, Math.PI);
+    ctx.fillStyle = "#bfc7cf";
+    ctx.fill();
 }
 
 /** Halde als flacher Kegel mit heller und dunkler Seite */

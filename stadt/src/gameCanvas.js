@@ -20,6 +20,7 @@ import { MouseBox } from './mouseBox.js';
 import { Position } from './position.ts';
 import { TileSet } from './tileSet.js';
 import { TILE_INVALID } from "./tileValues.ts";
+import { blinkOn, drawWaterDrop, isWaterZoneCentre, pipeColour, UNDERGROUND_SHADE } from './water/waterIcons.ts';
 
 function GameCanvas(id, parentNode) {
   if (!(this instanceof GameCanvas))
@@ -661,6 +662,12 @@ GameCanvas.prototype.paint = function(mouse, sprites, isPaused) {
   var paintWidth = this._totalTilesInViewX;
   var paintHeight = this._totalTilesInViewY;
 
+  // Dorfplaner: In der Untergrundansicht wird jedes Bild komplett neu gezeichnet, weil darüber die Abdunklung liegt
+  if (this._underground && lastPaintedTiles !== null) {
+    for (i = 0, l = lastPaintedTiles.length; i < l; i++)
+      lastPaintedTiles[i] = -2;
+  }
+
   // Fill an array with the values we need to paint
   var tileValues = this._map.getTileValuesForPainting(this._originX, this._originY, paintWidth, paintHeight, this._currentPaintedTiles);
 
@@ -670,6 +677,10 @@ GameCanvas.prototype.paint = function(mouse, sprites, isPaused) {
   this._paintTiles(ctx, tileValues);
   // The _paintTiles call updates this._lastPaintedTiles. Update our cached copy
   lastPaintedTiles = this._lastPaintedTiles;
+
+  // Dorfplaner: Rohre (Untergrund) und blinkende Wassertropfen
+  if (this._water)
+    this._paintWater(ctx, paintWidth, paintHeight, lastPaintedTiles);
 
   // Stash various values for next paint
   this._lastCanvasWidth = this.canvasWidth;
@@ -701,6 +712,97 @@ GameCanvas.prototype.paint = function(mouse, sprites, isPaused) {
           this._lastPaintedTiles[index] = -2;
         }
       }
+    }
+  }
+};
+
+
+// ---- Dorfplaner: Wasserversorgung in der Draufsicht ----------------------------------------------------------
+
+GameCanvas.prototype.setWaterSource = function(water) {
+  this._water = water;
+};
+
+
+// Untergrundansicht: Karte abgedunkelt, darüber die Rohre (grau ohne, blau mit Wasser)
+GameCanvas.prototype.setUnderground = function(underground) {
+  this._underground = underground;
+  this.forceRepaint();
+};
+
+
+GameCanvas.prototype._paintWater = function(ctx, paintWidth, paintHeight, lastPaintedTiles) {
+  var water = this._water;
+  var size = this.tileSize();
+  var x, y, mapX, mapY, index;
+
+  if (this._underground) {
+    ctx.fillStyle = UNDERGROUND_SHADE;
+    ctx.fillRect(0, 0, paintWidth * size, paintHeight * size);
+
+    for (y = 0; y < paintHeight; y++) {
+      for (x = 0; x < paintWidth; x++) {
+        mapX = this._originX + x;
+        mapY = this._originY + y;
+        if (!this._map.testBounds(mapX, mapY))
+          continue;
+
+        var kind = water.kindAt(mapX, mapY);
+        // versorgte Gebäude leicht blau einfärben
+        if (kind === 2 && water.isWatered(mapX, mapY)) {
+          ctx.fillStyle = 'rgba(80, 160, 255, 0.28)';
+          ctx.fillRect(x * size, y * size, size, size);
+        }
+
+        var cx = (x + 0.5) * size;
+        var cy = (y + 0.5) * size;
+        if (water.hasPipe(mapX, mapY)) {
+          ctx.strokeStyle = pipeColour(water.isFlowing(mapX, mapY));
+          ctx.lineWidth = Math.max(2, size * 0.28);
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + 0.01, cy);
+          var steps = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+          for (var s = 0; s < 4; s++) {
+            if (water.kindAt(mapX + steps[s][0], mapY + steps[s][1]) !== 0) {
+              ctx.moveTo(cx, cy);
+              ctx.lineTo(cx + steps[s][0] * size / 2, cy + steps[s][1] * size / 2);
+            }
+          }
+          ctx.stroke();
+        }
+
+        // Pumpen und Türme hervorheben
+        if (kind === 3) {
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = Math.max(1, size / 12);
+          ctx.strokeRect(x * size + 1, y * size + 1, size - 2, size - 2);
+        }
+      }
+    }
+    return;
+  }
+
+  // Blinkender Tropfen an Wohn-, Gewerbe- und Industriezonen ohne Wasser
+  var on = blinkOn(Date.now());
+  for (y = 0; y < paintHeight; y++) {
+    for (x = 0; x < paintWidth; x++) {
+      mapX = this._originX + x;
+      mapY = this._originY + y;
+      if (!this._map.testBounds(mapX, mapY))
+        continue;
+
+      var tile = this._map.getTile(mapX, mapY);
+      if (!isWaterZoneCentre(tile.getValue(), tile.isZone()) || water.isWatered(mapX, mapY))
+        continue;
+
+      if (on)
+        drawWaterDrop(ctx, (x + 0.75) * size, (y + 0.45) * size, size * 0.75);
+
+      // beim nächsten Bild neu zeichnen, damit der Tropfen blinkt
+      index = y * paintWidth + x;
+      lastPaintedTiles[index] = -2;
     }
   }
 };

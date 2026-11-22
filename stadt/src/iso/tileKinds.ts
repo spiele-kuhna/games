@@ -36,7 +36,7 @@ export type Cover = "none" | "trees" | "denseTrees" | "rubble" | "flood" | "radi
 
 /** Art einer Zone oder eines Gebäudes; Grundlage für Farbe und (ab Arbeitspaket 3) Gebäudeform. */
 export type ZoneType = "residential" | "hospital" | "church" | "commercial" | "industrial" | "port" | "airport" |
-                       "coal" | "fireStation" | "police" | "stadium" | "nuclear" | "park";
+                       "coal" | "fireStation" | "police" | "stadium" | "nuclear" | "park" | "pump" | "waterTower";
 
 export interface TileLook {
     readonly ground: Ground;
@@ -98,6 +98,7 @@ export const T = {
     RAILVPOWERH: 222, RESBASE: 240, RIVER: 2, ROADS: 66, RUBBLE: 44, STADIUMBASE: 779, TINYEXP: 860,
     TINYEXPLAST: 883, TREEBASE: 21, VBRDG0: 948, VBRDG3: 951, VBRIDGE: 65, VPOWER: 209, VRAIL: 225,
     VRAILROAD: 238, VROADPOWER: 78, WOODS: 37, WOODS5: 43,
+    PUMP: 1020, WATER_TOWER: 1021,
 };
 
 /** Straßen mit Verkehr (80–206) auf die Grundform 64–79 zurückführen, wie TileUtils.normalizeRoad(). */
@@ -134,6 +135,9 @@ export function zoneTypeOf(value: number): ZoneType | null {
     if (inRange(value, T.FOOTBALLGAME1, T.VBRDG0 - 1)) { return "stadium"; }
     if (inRange(value, T.NUKESWIRL1, T.NUKESWIRL4)) { return "nuclear"; }
     if (inRange(value, T.CHURCH1BASE, T.CHURCH7LAST)) { return "church"; }
+    // Dorfplaner: Wasserversorgung
+    if (value === T.PUMP) { return "pump"; }
+    if (value === T.WATER_TOWER) { return "waterTower"; }
     return null;
 }
 

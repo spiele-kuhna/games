@@ -16,6 +16,7 @@ import { TileUtils } from './tileUtils.js';
 import { COMCLR, CZB } from "./tileValues.ts";
 import { Traffic } from './traffic.js';
 import { ZoneUtils } from './zoneUtils.js';
+import { mayGrow, shouldShrink } from './water/waterRules.ts';
 
 // There are 20 types of commercial zone aside from the empty zone. They reflect 5 different categories of
 // population, and 4 grades of land value/pollution. Population value 1/low value corresponds to the 9 tiles
@@ -39,7 +40,11 @@ var placeCommercial = function(map, x, y, population, lpValue, zonePower) {
 };
 
 
-var growZone = function(map, x, y, blockMaps, population, lpValue, zonePower) {
+var growZone = function(map, x, y, blockMaps, population, lpValue, zonePower, watered) {
+  // Dorfplaner: ohne Wasser nur bis zur mittleren Stufe
+  if (!mayGrow('commercial', population, watered))
+    return;
+
   // landValueMap contains values in the range 0-250, representing the desirability of the land.
   // Thus, after shifting, landValue will be in the range 0-7.
   var landValue = blockMaps.landValueMap.worldGet(x, y);
@@ -85,6 +90,15 @@ var commercialFound = function(map, x, y, simData) {
 
   var zonePower = map.getTile(x, y).isPowered();
 
+  // Dorfplaner: Wasserversorgung. Ohne Wasser fallen dichte Zonen nach der Schonfrist gelegentlich zurück.
+  var watered = simData.waterManager.isWatered(x, y);
+  if (shouldShrink('commercial', population, watered, simData.cityTime, simData.waterManager.graceUntil) &&
+      Random.getChance(7)) {
+    degradeZone(map, x, y, simData.blockMaps, population, ZoneUtils.getLandPollutionValue(simData.blockMaps, x, y),
+                zonePower);
+    return;
+  }
+
   // Occasionally check to see if the zone is connected to the transport network (the chance of this happening
   // increases as the population increases). Growth naturally stalls if consumers cannot reach the shops.
   // Note in particular, we will never take this branch if the zone is empty.
@@ -125,7 +139,7 @@ var commercialFound = function(map, x, y, simData) {
     // (the business itself might still be growing.
     if (zonePower && zoneScore > -350 && (zoneScore - 26380) > Random.getRandom16Signed()) {
       lpValue = ZoneUtils.getLandPollutionValue(simData.blockMaps, x, y);
-      growZone(map, x, y, simData.blockMaps, population, lpValue, zonePower);
+      growZone(map, x, y, simData.blockMaps, population, lpValue, zonePower, watered);
       return;
     }
 

@@ -24,7 +24,7 @@ export const FILE_FORMAT = "dorfplaner-spielstand";
 export const FILE_FORMAT_VERSION = 1;
 
 /** Höchste Version der Spielstände, die das Spiel lesen kann (siehe Storage.CURRENT_VERSION). */
-export const MAX_GAME_VERSION = 3;
+export const MAX_GAME_VERSION = 4;
 
 /** Ein Eintrag im Verzeichnis der Spielstände. */
 export interface SaveEntry {

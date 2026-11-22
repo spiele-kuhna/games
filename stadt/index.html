@@ -151,12 +151,15 @@
             <button id="fireButton" data-size="3" data-tool="fire" data-colour="red" class="toolButton unselected">Feuerwehr 500 $</button>
             <button id="railButton" data-size="1" data-tool="rail" data-colour="brown" class="toolButton unselected">Schiene 20 $</button>
             <button id="portButton" data-size="4" data-tool="port" data-colour="dodgerblue" class="toolButton unselected">Hafen 3000 $</button>
-            <button id="wireButton" data-size="1" data-tool="wire" data-colour="khaki" class="toolButton unselected">Leitung 5 $</button>
+            <button id="wireButton" data-size="1" data-tool="wire" data-colour="khaki" class="toolButton unselected">Stromleitung 5 $</button>
             <button id="stadiumButton" data-size="4" data-tool="stadium" data-colour="indigo" class="toolButton unselected">Stadion 5000 $</button>
             <button id="bulldozerButton" data-size="1" data-tool="bulldozer" data-colour="salmon" class="toolButton unselected">Abriss 1 $</button>
             <button id="airportButton" data-size="6" data-tool="airport" data-colour="violet" class="toolButton unselected">Flughafen 10000 $</button>
             <button id="queryButton" data-size="1" data-tool="query" data-colour="cyan" class="toolButton unselected">Abfrage</button>
             <button id="parkButton" data-size="1" data-tool="park" data-colour="darkgreen" class="toolButton unselected">Park 10 $</button>
+            <button id="pipeButton" data-size="1" data-tool="pipe" data-colour="deepskyblue" class="toolButton unselected" title="Rohre liegen unter der Erde, auch unter Straßen und Gebäuden">Wasserrohr 5 $</button>
+            <button id="pumpButton" data-size="1" data-tool="pump" data-colour="steelblue" class="toolButton unselected" title="Braucht Strom; direkt am Wasser doppelte Leistung">Pumpe 300 $</button>
+            <button id="waterTowerButton" data-size="1" data-tool="waterTower" data-colour="lightsteelblue" class="toolButton unselected" title="Speichert Wasser für Engpässe">Wasserturm 250 $</button>
           </div>
         </div>
         <div id="monstertv" class="alignCenter z1 hidden rightedge padding10 controlShadow open">
@@ -181,6 +184,7 @@
           <button id="rotateRight" type="button" title="Nach rechts drehen (E)" aria-label="Nach rechts drehen">&#x21BB;</button>
           <button id="zoomOut" type="button" title="Weiter weg (−)" aria-label="Verkleinern">&minus;</button>
           <button id="zoomIn" type="button" title="Näher heran (+)" aria-label="Vergrößern">+</button>
+          <button id="undergroundToggle" type="button" title="Untergrund: Wasserrohre zeigen (U)" aria-label="Untergrundansicht" aria-pressed="false">&#x1F4A7;</button>
         </div>
         <div id="notifications" class="initialHidden neutral z1 rightedge alignCenter elided padding10 controlShadow"></div>
         <div id="tooSmall" data-hasscript="false" class="mintcream open"><div id="tooSmallInner" class="alignCenter padding10"><h2 class="chunk">Oh nein!</h2><p>Dieser Bildschirm ist zu klein &ndash; hier passen nicht alle Knöpfe und Anzeigen hin. Tut mir leid!</p></div></div>
@@ -320,6 +324,7 @@
               <dt class="queryItem">Kriminalität</dt><dd class="queryItem queryRight" id="queryCrime"></dd>
               <dt class="queryItem">Verschmutzung</dt><dd class="queryItem queryRight" id="queryPollution"></dd>
               <dt class="queryItem">Wachstum</dt><dd class="queryItem queryRight" id="queryRate"></dd>
+              <dt class="queryItem">Wasser</dt><dd class="queryItem queryRight" id="queryWater"></dd>
             </dl>
             <div id="queryDebugList" class="queryDebug hidden">
               <dl>

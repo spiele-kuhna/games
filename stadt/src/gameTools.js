@@ -22,8 +22,11 @@ import { RoadTool } from './roadTool.js';
 import { QueryTool } from './queryTool.js';
 import * as TileValues from "./tileValues.ts";
 import { WireTool } from './wireTool.js';
+import { PipeTool, WaterBuildingTool } from './waterTools.js';
+import { PUMP_COST, TOWER_COST } from './water/waterRules.ts';
 
-function GameTools(map) {
+// Dorfplaner: waterManager für Rohre, Pumpen und Wassertürme
+function GameTools(map, waterManager) {
   var tools = EventEmitter({
     airport: new BuildingTool(10000, TileValues.AIRPORT, map, 6, false),
     bulldozer: new BulldozerTool(map),
@@ -33,16 +36,20 @@ function GameTools(map) {
     industrial: new BuildingTool(100, TileValues.INDCLR, map, 3, false),
     nuclear: new BuildingTool(5000, TileValues.NUCLEAR, map, 4, true),
     park: new ParkTool(map),
+    pipe: new PipeTool(map, waterManager),
     police: new BuildingTool(500, TileValues.POLICESTATION, map, 3, false),
     port: new BuildingTool(3000, TileValues.PORT, map, 4, false),
+    pump: new WaterBuildingTool(map, waterManager, TileValues.PUMP, PUMP_COST),
     rail: new RailTool(map),
     residential: new BuildingTool(100, TileValues.FREEZ, map, 3, false),
     road: new RoadTool(map),
-    query: new QueryTool(map),
+    query: new QueryTool(map, waterManager),
     stadium: new BuildingTool(5000, TileValues.STADIUM, map, 4, false),
+    waterTower: new WaterBuildingTool(map, waterManager, TileValues.WATER_TOWER, TOWER_COST),
     wire: new WireTool(map),
   });
 
+  tools.bulldozer.setWaterManager(waterManager);
   tools.query.addEventListener(QUERY_WINDOW_NEEDED, MiscUtils.reflectEvent.bind(tools, QUERY_WINDOW_NEEDED));
 
   return tools;

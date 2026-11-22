@@ -180,11 +180,12 @@ lauffähigen Stand, Unit-Tests für die reinen Rechenfunktionen und einem kurzen
 | **5** | Eingabe neu: Pointer Events, Verschieben, Zoom (3 Stufen), Drehen (4 Richtungen), Gesten, Tastatur | am PC und iPad bedienbar | 10 h |
 | **6** | Oberfläche: Menüleiste, Statuszeile, Symbolleiste mit eigenen Symbolen, Tempo-Menü | neue Bedienoberfläche | 8 h |
 | **7** | Übersichtskarte mit Einblendungen (Verschmutzung, Kriminalität, Bodenwert, Verkehr, Strom); Klick springt | Überblick über die Stadt | 6 h |
-| **8** | Höhenkarte: Datenstruktur in `GameMap`, Kartengenerator, Speichern Version 4, alte Spielstände; Unit-Tests | Gelände mit Höhen in den Daten | 8 h |
+| **8** | Höhenkarte: Datenstruktur in `GameMap`, Kartengenerator, Speichern Version 5, alte Spielstände; Unit-Tests | Gelände mit Höhen in den Daten | 8 h |
 | **9** | Höhen zeichnen: Hangformen, Gebäude auf Höhe, Picking mit Höhe | Hügel sichtbar und anklickbar | 10 h |
 | **10** | Bauregeln am Hang, Werkzeug „Planieren“, Meldungen | spielbar mit Hügeln | 8 h |
 | **11** | Abschluss: Tests Desktop-Browser und iPad-Safari, README „Was wurde erweitert“, `LERNNOTIZEN.md` | präsentationsfertig | 6 h |
-| | **Summe** | | **≈ 88 h** |
+| **12–14** | **Wasserversorgung** (nachträglich beauftragt, erledigt 22.11.2026): Rohre, Pumpe, Wasserturm, Netz, Wachstumsgrenze und Rückbau, Untergrundansicht in beiden Ansichten, Tropfen, Speichern Version 4, Meldungen; Unit-Tests | Zonen brauchen Wasser | ≈ 25 h |
+| | **Summe** | | **≈ 113 h** |
 
 Reihenfolge wie vorgegeben: erst Gelände und Straßen (AP 2), dann Zonen und Gebäude (AP 3), Höhen erst nach der
 fertigen flachen Isometrie (AP 8–10).

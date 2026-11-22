@@ -74,6 +74,11 @@ describe("saveSlots", () => {
             expect(unwrapImport(JSON.stringify(smallGame)).ok).toBe(true);
         });
 
+        it("should accept games with water supply (version 4), but nothing newer", () => {
+            expect(unwrapImport(JSON.stringify({ ...smallGame, pipes: "1,2,1", version: 4 })).ok).toBe(true);
+            expect(unwrapImport(JSON.stringify({ ...smallGame, version: 5 })).ok).toBe(false);
+        });
+
         it("should reject files that are not a game", () => {
             expect(unwrapImport("kein json").ok).toBe(false);
             expect(unwrapImport("42").ok).toBe(false);

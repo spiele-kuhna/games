@@ -80,6 +80,9 @@ const GROUPS: Group[] = [
     { count: 1, first: 811, levelOf: FIXED, size: 4, zone: "nuclear" },
     // Weitere Kirchen (CHURCH1 … CHURCH7)
     { count: 7, first: 956, levelOf: (g) => ({ level: 0, value: g % 4 }), size: 3, zone: "church" },
+    // Dorfplaner: Pumpe und Wasserturm (je eine Kachel)
+    { count: 1, first: 1020, levelOf: FIXED, size: 1, zone: "pump" },
+    { count: 1, first: 1021, levelOf: FIXED, size: 1, zone: "waterTower" },
 ];
 
 /*

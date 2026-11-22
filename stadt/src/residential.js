@@ -19,6 +19,7 @@ import { TileUtils } from './tileUtils.js';
 import * as TileValues from "./tileValues.ts";
 import { Traffic } from './traffic.js';
 import { ZoneUtils } from './zoneUtils.js';
+import { mayGrow, residentialGrowthTarget, residentialLevel, shouldShrink } from './water/waterRules.ts';
 
 // Residential tiles have 'populations' of 16, 24, 32 or 40, and value from 0 to 3. The tiles are laid out in
 // increasing order of land value, cycling through each population value
@@ -114,7 +115,11 @@ var buildHouse = function(map, x, y, lpValue) {
 };
 
 
-var growZone = function(map, x, y, blockMaps, population, lpValue, zonePower) {
+var growZone = function(map, x, y, blockMaps, population, lpValue, zonePower, watered) {
+  // Dorfplaner: ohne Wasser nur bis zur mittleren Stufe
+  if (!mayGrow('residential', population, watered))
+    return;
+
   var pollution = blockMaps.pollutionDensityMap.worldGet(x, y);
 
   // Cough! Too polluted! No-one wants to move here!
@@ -139,7 +144,8 @@ var growZone = function(map, x, y, blockMaps, population, lpValue, zonePower) {
 
   if (population < 40) {
     // Zone population not yet maxed out
-    placeResidential(map, x, y, Math.floor(population / 8) - 1, lpValue, zonePower);
+    // Dorfplaner: ohne Wasser höchstens Stufe 1
+    placeResidential(map, x, y, residentialGrowthTarget(population, watered), lpValue, zonePower);
     ZoneUtils.incRateOfGrowth(blockMaps, x, y, 8);
   }
 };
@@ -223,6 +229,17 @@ var residentialFound = function(map, x, y, simData) {
 
   var zonePower = map.getTile(x, y).isPowered();
 
+  // Dorfplaner: Wasserversorgung. Ohne Wasser fallen dichte Zonen nach der Schonfrist gelegentlich zurück.
+  var watered = simData.waterManager.isWatered(x, y);
+  if (shouldShrink('residential', population, watered, simData.cityTime, simData.waterManager.graceUntil) &&
+      Random.getChance(7)) {
+    // eine Stufe zurück (eigene Rechnung, weil degradeZone im Original die Stufe nicht senkt)
+    placeResidential(map, x, y, residentialLevel(population) - 1,
+                     ZoneUtils.getLandPollutionValue(simData.blockMaps, x, y), zonePower);
+    ZoneUtils.incRateOfGrowth(simData.blockMaps, x, y, -8);
+    return;
+  }
+
   var trafficOK = Traffic.ROUTE_FOUND;
 
   // Occasionally check to see if the zone is connected to the road network. The chance of this happening increases
@@ -271,7 +288,7 @@ var residentialFound = function(map, x, y, simData) {
       // Get an index in the range 0-3 scoring the land desirability and pollution, and grow the zone to the next
       // population rank
       lpValue = ZoneUtils.getLandPollutionValue(simData.blockMaps, x, y);
-      growZone(map, x, y, simData.blockMaps, population, lpValue, zonePower);
+      growZone(map, x, y, simData.blockMaps, population, lpValue, zonePower, watered);
       return;
     }
 

@@ -60,6 +60,10 @@ Das ist ein Eingriff in die Simulation (Fehlerbehebung, die das ursprünglich ge
 
 ## 4. Konzept Wasserversorgung (eigene Umsetzung)
 
+> **Umgesetzt am 22.11.2026** (Grundausbau, siehe `ARCHITEKTUR.md` Abschnitt 4.4). Abweichend vom Vorschlag unten:
+> Zonen ohne Wasser schrumpfen nach einer Schonfrist von einem Spieljahr zurück, und die Regel gilt auch für alte
+> Spielstände. Die zweite Ausbaustufe (Wetter, Kläranlage, Entsalzung) ist offen.
+
 So funktioniert es im Vorbild (gesichert laut Handbuch, Zahlen teils nur aus Fan-Quellen):
 
 | Element | Funktion |

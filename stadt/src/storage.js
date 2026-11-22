@@ -157,6 +157,14 @@ var transitionOldSave = function(savedGame) {
       savedGame.cityCentreX = Math.floor(savedGame.width / 2);
       savedGame.cityCentreY = Math.floor(savedGame.height / 2);
 
+      /* falls through */
+    case 3:
+      // Dorfplaner: Version 4 bringt die Wasserversorgung. Alte Städte haben noch keine Rohre und bekommen ein
+      // Spieljahr Schonfrist, bevor Zonen ohne Wasser schrumpfen.
+      savedGame.pipes = '';
+      savedGame.waterTowers = [];
+      savedGame.waterGraceUntil = (savedGame._cityTime || 0) + 48;
+
       break;
 
     default:
@@ -185,7 +193,7 @@ var storageAvailable = (function() {
   }
 })();
 
-Object.defineProperty(Storage, 'CURRENT_VERSION', MiscUtils.makeConstantDescriptor(3));
+Object.defineProperty(Storage, 'CURRENT_VERSION', MiscUtils.makeConstantDescriptor(4));
 Object.defineProperty(Storage, 'canStore', MiscUtils.makeConstantDescriptor(storageAvailable));
 
 

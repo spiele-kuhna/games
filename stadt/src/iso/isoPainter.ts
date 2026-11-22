@@ -27,6 +27,7 @@
 import { BuildingPart } from "./buildingTable";
 import { drawBuildingPart, drawLightning, drawSmoke, requiredHeadroom, smokeBase } from "./isoBuildings";
 import { EAST, NORTH, SOUTH, TileLook, Traffic, WEST, ZoneType } from "./tileKinds";
+import { drawWaterDrop, pipeColour, UNDERGROUND_SHADE } from "../water/waterIcons";
 
 /** Farben – alle selbst gewählt. */
 const COLOURS = {
@@ -69,8 +70,10 @@ const ZONE_COLOURS: { [zone in ZoneType]: string } = {
     park: "#5aa64a",
     police: "#3f5fa8",
     port: "#7fa3b8",
+    pump: "#5b7fa3",
     residential: "#a7dc78",
     stadium: "#8e6bb8",
+    waterTower: "#d7dde3",
 };
 
 interface ScreenPoint {
@@ -97,6 +100,24 @@ export interface PaintRequest {
     readonly smoke: boolean;
     /** Blitz-Symbol: Zone ohne Strom */
     readonly lightning: boolean;
+    /** Dorfplaner: Wasserversorgung */
+    readonly water?: WaterLook | null;
+}
+
+/** Dorfplaner: Wasserversorgung auf einer Kachel (null = nichts zu zeigen) */
+export interface WaterLook {
+    /** Untergrundansicht: Gebäude ausblenden, Rohre zeigen */
+    readonly underground: boolean;
+    /** Rohranschlüsse in Ansichtsrichtungen (NORTH | EAST | …), −1 = kein Rohr */
+    readonly pipes: number;
+    /** Wasser fließt hier (blaues Rohr) */
+    readonly flowing: boolean;
+    /** 0 nichts, 2 Gebäude (Verbraucher), 3 Pumpe/Turm – wie in waterRules.ts */
+    readonly kind: number;
+    /** Gebäude hat Wasser */
+    readonly supplied: boolean;
+    /** blinkender Tropfen: Zone ohne Wasser (nur im „An“-Takt gesetzt) */
+    readonly noWater: boolean;
 }
 
 /** Ein zwischengespeichertes Kachelbild und wie weit es über die Rautenspitze hinausragt. */
@@ -149,7 +170,7 @@ export class IsoTilePainter {
                      b || look.zone === "park" ? [b ? [b.zone, b.size, b.dx, b.dy, b.level, b.value].join(",") : "park",
                                                   request.rotation].join(",") : "-",
                      request.traffic.level, request.traffic.frame, request.frame, request.smoke,
-                     request.lightning].join("|");
+                     request.lightning, waterKey(request.water)].join("|");
         let image = this.cache[key];
         if (!image) {
             image = this.renderImage(request);
@@ -159,12 +180,16 @@ export class IsoTilePainter {
     }
 
     private renderImage(request: PaintRequest): CachedImage {
+        if (request.water && request.water.underground) {
+            return this.renderUnderground(request, request.water);
+        }
+        const noWater = request.water ? request.water.noWater : false;
         // Gebäude brauchen mehr Platz nach oben als flache Kacheln
         let headroom = request.building !== null
             ? Math.max(this.headroom, requiredHeadroom(request.building, this.tileWidth, request.variant) + 4)
             : this.headroom;
-        if (request.smoke || request.lightning) {
-            headroom += Math.ceil(this.tileWidth * 0.5);   // Platz für Rauchwolken bzw. den Blitz
+        if (request.smoke || request.lightning || noWater) {
+            headroom += Math.ceil(this.tileWidth * 0.5);   // Platz für Rauchwolken, Blitz bzw. Tropfen
         }
         const canvas = document.createElement("canvas");
         canvas.width = Math.ceil(this.tileWidth * this.pixelRatio);
@@ -192,6 +217,58 @@ export class IsoTilePainter {
         const top = request.building !== null ? smokeBase(request.building, this.tileWidth, request.variant) : 0;
         if (request.smoke && request.frame >= 0) { drawSmoke(ctx, this, top, request.frame); }
         if (request.lightning) { drawLightning(ctx, this, top); }
+        if (noWater) {
+            // Wassertropfen neben dem Blitz
+            const c = this.localToScreen(0.5, 0.5, top + this.tileWidth * 0.12);
+            drawWaterDrop(ctx, c.x + this.tileWidth * 0.14, c.y, this.tileWidth * 0.22);
+        }
+        return { canvas, headroom };
+    }
+
+    /*
+     * Untergrundansicht: nur Boden (abgedunkelt), Gebäude als flache Grundfläche, darüber die Wasserrohre.
+     * Grau = ohne Wasser, blau = Wasser fließt; versorgte Gebäude sind blau getönt.
+     */
+    private renderUnderground(request: PaintRequest, water: WaterLook): CachedImage {
+        const headroom = this.headroom;
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.ceil(this.tileWidth * this.pixelRatio);
+        canvas.height = Math.ceil((this.tileHeight + headroom) * this.pixelRatio);
+        const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
+        ctx.scale(this.pixelRatio, this.pixelRatio);
+        ctx.translate(this.tileWidth / 2, headroom);
+
+        this.drawGround(ctx, request);
+        if (request.look.roads !== 0) { this.drawRoads(ctx, request.look.roads, request.look.bridge); }
+        this.fillDiamond(ctx, UNDERGROUND_SHADE);
+
+        if (water.kind === 2) {
+            this.fillLocalRect(ctx, 0.04, 0.04, 0.96, 0.96,
+                               water.supplied ? "rgba(80, 160, 255, 0.35)" : "rgba(200, 200, 200, 0.12)");
+        }
+        if (water.pipes >= 0) {
+            const centre = this.localToScreen(0.5, 0.5, 1);
+            const edges: { [d: number]: [number, number] } = {
+                [NORTH]: [0.5, 0], [SOUTH]: [0.5, 1], [EAST]: [1, 0.5], [WEST]: [0, 0.5] };
+            ctx.strokeStyle = pipeColour(water.flowing);
+            ctx.lineWidth = Math.max(2, this.tileWidth * 0.09);
+            ctx.lineCap = "round";
+            ctx.beginPath();
+            ctx.moveTo(centre.x, centre.y);
+            ctx.lineTo(centre.x + 0.01, centre.y);
+            this.forEachDirection(water.pipes, (d) => {
+                const end = this.localToScreen(edges[d][0], edges[d][1], 1);
+                ctx.moveTo(centre.x, centre.y);
+                ctx.lineTo(end.x, end.y);
+            });
+            ctx.stroke();
+        }
+        if (water.kind === 3) {
+            // Pumpe oder Wasserturm: weißer Rahmen und Tropfen
+            const c = this.localToScreen(0.5, 0.5, 0);
+            this.fillLocalRect(ctx, 0.15, 0.15, 0.85, 0.85, "rgba(255, 255, 255, 0.25)");
+            drawWaterDrop(ctx, c.x, c.y - this.tileWidth * 0.08, this.tileWidth * 0.25);
+        }
         return { canvas, headroom };
     }
 
@@ -580,4 +657,14 @@ export class IsoTilePainter {
         ctx.lineTo(top.x + this.tileWidth * 0.06, top.y + 2);
         ctx.stroke();
     }
+}
+
+
+/** Teil des Cache-Schlüssels für die Wasserversorgung */
+function waterKey(water: WaterLook | null | undefined): string {
+    if (!water) {
+        return "-";
+    }
+    return [water.underground ? 1 : 0, water.pipes, water.flowing ? 1 : 0, water.kind, water.supplied ? 1 : 0,
+            water.noWater ? 1 : 0].join(",");
 }

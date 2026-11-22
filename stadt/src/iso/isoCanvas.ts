@@ -27,12 +27,22 @@ import {
     screenToViewFraction, viewSize, ViewParams, ViewRect, visibleViewRect, viewToMap,
 } from "./projection";
 import { buildingPartOf } from "./buildingTable";
-import { IsoTilePainter, PaintRequest } from "./isoPainter";
+import { IsoTilePainter, PaintRequest, WaterLook } from "./isoPainter";
+import { blinkOn } from "../water/waterIcons";
 import { drawSprite, SpriteLike, spriteCentre } from "./isoSprites";
 import { nextZoomLevel, zoomOrigin } from "../ui/gestures";
 import {
     animationFrameOf, describeTile, EAST, isSmoke, LIGHTNING_BOLT, NORTH, rotateMask, SOUTH, trafficOf, WEST,
 } from "./tileKinds";
+
+/** Dorfplaner: Was IsoCanvas vom Wassernetz braucht (WaterManager erfüllt das). */
+interface WaterSourceLike {
+    readonly revision: number;
+    hasPipe(x: number, y: number): boolean;
+    isFlowing(x: number, y: number): boolean;
+    isWatered(x: number, y: number): boolean;
+    kindAt(x: number, y: number): number;
+}
 
 /** Was IsoCanvas von der Karte braucht (GameMap erfüllt das). */
 interface MapLike {
@@ -109,6 +119,8 @@ export class IsoCanvas {
     // Animationen: eigener AnimationManager wie in GameCanvas; animierte Werte des Karten-Rechtecks
     private animation: AnimationLike | null = null;
     private sprites: SpriteSource | null = null;
+    private water: WaterSourceLike | null = null;
+    private underground = false;
     private trafficSource: TrafficSource | null = null;
     /** Takt für Autos auf Straßen mit wenig Verkehr (viermal pro Sekunde ein Schritt) */
     private trafficTick = 0;
@@ -132,6 +144,17 @@ export class IsoCanvas {
         this.measure();
         this.dimensionsChanged = true;
         this.centreOn(Math.floor(map.width / 2), Math.floor(map.height / 2));
+    }
+
+    /** Dorfplaner: Wassernetz für Rohre und Tropfen */
+    setWaterSource(water: WaterSourceLike): void {
+        this.water = water;
+    }
+
+    /** Dorfplaner: Untergrundansicht ein- oder ausschalten */
+    setUnderground(underground: boolean): void {
+        this.underground = underground;
+        this.lastSignature = "";
     }
 
     /** Wird aufgerufen, wenn die Ansicht eingeschaltet wird: Das Canvas-Element teilen wir mit GameCanvas. */
@@ -305,7 +328,9 @@ export class IsoCanvas {
         const sprites = this.activeSprites();
         // Eigener, ruhiger Takt für fahrende Autos (unabhängig vom schnellen Animationstakt der Simulation)
         this.trafficTick = isPaused === true ? this.trafficTick : Math.floor(Date.now() / CAR_STEP_MS);
-        const signature = [this.trafficTick, this.canvasWidth, this.canvasHeight, this.tileWidth, this.rotation, this.originX,
+        const waterState = this.water ? [this.underground ? 1 : 0, this.water.revision, blinkOn(Date.now()) ? 1 : 0].join(",")
+                                      : "-";
+        const signature = [waterState, this.trafficTick, this.canvasWidth, this.canvasHeight, this.tileWidth, this.rotation, this.originX,
                            this.originY, mouse ? [mouse.x, mouse.y, mouse.width, mouse.colour].join(",") : "-",
                            rect ? [rect.minX, rect.maxX, rect.minY, rect.maxY].join(",") : "-",
                            sprites.map((s) => [s.type, s.frame, s.x, s.y].join(",")).join(";")].join("|");
@@ -323,7 +348,9 @@ export class IsoCanvas {
         if (rect !== null) {
             this.drawTiles(ctx, rect, map, view, painter);
         }
-        this.drawSprites(ctx, sprites, map, view);
+        if (!this.underground) {
+            this.drawSprites(ctx, sprites, map, view);
+        }
         if (mouse) {
             this.drawMouseBox(ctx, mouse, map, view);
         }
@@ -398,6 +425,7 @@ export class IsoCanvas {
             rotation: this.rotation,
             traffic: this.trafficFor(shown, raw.roads !== 0, tile.x, tile.y),
             variant,
+            water: this.waterLookFor(tile.x, tile.y, building),
         };
     }
 
@@ -460,6 +488,37 @@ export class IsoCanvas {
             const ground = projectToScreen(point.x, point.y, 0, view);
             drawSprite(ctx, sprite, ground.x, ground.y, this.tileWidth, this.rotation);
         }
+    }
+
+    /*
+     * Dorfplaner: Wasser auf einer Kachel. Rohranschlüsse werden wie Straßen in Kartenrichtungen bestimmt und dann
+     * in die Ansicht gedreht. Ein Rohr verbindet sich mit Rohren, Gebäuden, Pumpen und Türmen nebenan.
+     */
+    private waterLookFor(x: number, y: number, building: ReturnType<typeof buildingPartOf>): WaterLook | null {
+        const water = this.water;
+        if (water === null) {
+            return null;
+        }
+        if (this.underground) {
+            let pipes = -1;
+            if (water.hasPipe(x, y)) {
+                pipes = 0;
+                if (water.kindAt(x, y - 1) !== 0) { pipes |= NORTH; }
+                if (water.kindAt(x + 1, y) !== 0) { pipes |= EAST; }
+                if (water.kindAt(x, y + 1) !== 0) { pipes |= SOUTH; }
+                if (water.kindAt(x - 1, y) !== 0) { pipes |= WEST; }
+                pipes = rotateMask(pipes, this.rotation);
+            }
+            return { flowing: water.isFlowing(x, y), kind: water.kindAt(x, y), noWater: false, pipes,
+                     supplied: water.isWatered(x, y), underground: true };
+        }
+        // Tropfen nur an der Mitte von Wohn-, Gewerbe- und Industriezonen
+        const zoneCentre = building !== null && building.size === 3 && building.dx === 1 && building.dy === 1 &&
+            (building.zone === "residential" || building.zone === "commercial" || building.zone === "industrial");
+        if (!zoneCentre || water.isWatered(x, y) || !blinkOn(Date.now())) {
+            return null;
+        }
+        return { flowing: false, kind: 2, noWater: true, pipes: -1, supplied: false, underground: false };
     }
 
     /** Feste „Zufallszahl“ 0–3 je Kartenkachel, damit Wiesen und Wasser lebendiger aussehen – auch nach Drehen. */

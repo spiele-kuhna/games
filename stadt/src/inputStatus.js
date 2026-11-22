@@ -20,8 +20,8 @@ import * as Messages from './messages.ts';
 import { MiscUtils } from './miscUtils.js';
 import { PointerInput } from './ui/pointerInput.ts';
 
-var InputStatus = EventEmitter(function(map, tileWidth) {
-  this.gameTools = new GameTools(map);
+var InputStatus = EventEmitter(function(map, tileWidth, waterManager) {
+  this.gameTools = new GameTools(map, waterManager);
 
   this.gameTools.addEventListener(Messages.QUERY_WINDOW_NEEDED, MiscUtils.reflectEvent.bind(this, Messages.QUERY_WINDOW_NEEDED));
 
@@ -154,6 +154,10 @@ var toolButtonHandler = function(e) {
   this.toolColour = $(e.target).attr('data-colour');
   $(toolOutputID).html('Werkzeuge');
 
+  // Dorfplaner: z. B. Untergrundansicht beim Rohrwerkzeug einschalten (game.js)
+  if (this.onToolChanged)
+    this.onToolChanged(this.toolName);
+
   if (this.toolName !== 'query') {
     $(this.canvasID).removeClass('helpPointer');
     $(this.canvasID).addClass('pointer');
@@ -234,6 +238,9 @@ InputStatus.prototype.clearTool = function() {
   this.toolWidth = 0;
   this.toolColour = '';
   $('.selected').removeClass('selected').addClass('unselected');
+
+  if (this.onToolChanged)
+    this.onToolChanged(null);
 };
 
 

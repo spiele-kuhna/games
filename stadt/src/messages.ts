@@ -53,6 +53,10 @@ export const NEED_SEAPORT = "Seaport needed";
 export const NEED_STADIUM = "Stadium needed";
 export const NO_MONEY = "No money";
 export const NOT_ENOUGH_POWER = "Not enough power";
+// Dorfplaner: Wasserversorgung
+export const NOT_ENOUGH_WATER = "Not enough water";
+export const NEED_WATER = "Water needed";
+export const ZONES_WITHOUT_WATER = "Zones without water";
 export const NUCLEAR_MELTDOWN = "Nuclear Meltdown";
 export const PLANE_CRASHED = "Plane crashed";
 export const POLICE_NEEDS_FUNDING = "Police need funding";

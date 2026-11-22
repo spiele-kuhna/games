@@ -21,9 +21,26 @@ import { Text } from './text.js';
 import * as TileValues from "./tileValues.ts";
 
 var makeTool = BaseTool.makeTool;
-var QueryTool = EventEmitter(makeTool(function(map) {
+var QueryTool = EventEmitter(makeTool(function(map, waterManager) {
   this.init(0, map, false, false);
+  this._water = waterManager;
 }));
+
+
+// Dorfplaner: Wasserversorgung der abgefragten Stelle
+QueryTool.prototype.classifyWater = function(x, y) {
+  var text = 'kein Gebäude';
+  if (this._water) {
+    var kind = this._water.kindAt(x, y);
+    if (kind === 3)
+      text = 'Wasserwerk';
+    else if (kind === 2)
+      text = this._water.isWatered(x, y) ? 'versorgt' : 'nicht versorgt';
+    else if (this._water.hasPipe(x, y))
+      text = this._water.isFlowing(x, y) ? 'Rohr mit Wasser' : 'Rohr ohne Wasser';
+  }
+  $('#queryWater').text(text);
+};
 
 
 QueryTool.prototype.classifyPopulationDensity = function(x, y, blockMaps) {
@@ -143,6 +160,7 @@ QueryTool.prototype.doTool = function(x, y, blockMaps) {
   this.classifyCrime(x, y, blockMaps);
   this.classifyPollution(x, y, blockMaps);
   this.classifyRateOfGrowth(x, y, blockMaps);
+  this.classifyWater(x, y);
   this.classifyDebug(x, y, blockMaps);
 
   this._emitEvent(QUERY_WINDOW_NEEDED);

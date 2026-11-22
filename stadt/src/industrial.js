@@ -17,6 +17,7 @@ import { TileUtils } from './tileUtils.js';
 import { INDCLR, IZB } from "./tileValues.ts";
 import { Traffic } from './traffic.js';
 import { ZoneUtils } from './zoneUtils.js';
+import { mayGrow, shouldShrink } from './water/waterRules.ts';
 
 // There are 8 types of industrial zone aside from the empty zone. They are categorized by population and value.
 // There are 4 levels of population (1-4), and 2 levels of value.
@@ -42,7 +43,11 @@ var placeIndustrial = function(map, x, y, populationCategory, valueCategory, zon
 };
 
 
-var growZone = function(map, x, y, blockMaps, population, valueCategory, zonePower) {
+var growZone = function(map, x, y, blockMaps, population, valueCategory, zonePower, watered) {
+  // Dorfplaner: ohne Wasser nur bis zur mittleren Stufe
+  if (!mayGrow('industrial', population, watered))
+    return;
+
   // Switch to the next category of zone
   if (population < 4) {
     placeIndustrial(map, x, y, population, valueCategory, zonePower);
@@ -106,6 +111,14 @@ var industrialFound = function(map, x, y, simData) {
   var zonePower = map.getTile(x, y).isPowered();
   setAnimation(map, x, y, tileValue, zonePower);
 
+  // Dorfplaner: Wasserversorgung. Ohne Wasser fallen dichte Zonen nach der Schonfrist gelegentlich zurück.
+  var watered = simData.waterManager.isWatered(x, y);
+  if (shouldShrink('industrial', population, watered, simData.cityTime, simData.waterManager.graceUntil) &&
+      Random.getChance(7)) {
+    degradeZone(map, x, y, simData.blockMaps, population, Random.getRandom16() & 1, zonePower);
+    return;
+  }
+
   // Occasionally check to see if the zone is connected to the transport network (the chance of this happening
   // increases as the population increases). Growth naturally stalls if workers cannot reach the factories.
   // Note in particular, we will never take this branch if the zone is empty.
@@ -142,7 +155,7 @@ var industrialFound = function(map, x, y, simData) {
     // This has the nice effect of not preventing an individual unit from growing even if overall demand has collapsed
     // (the business itself might still be growing.
     if (zoneScore > -350 && (zoneScore - 26380) > Random.getRandom16Signed()) {
-      growZone(map, x, y, simData.blockMaps, population, Random.getRandom16() & 1, zonePower);
+      growZone(map, x, y, simData.blockMaps, population, Random.getRandom16() & 1, zonePower, watered);
       return;
     }
 

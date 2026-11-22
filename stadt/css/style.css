@@ -630,6 +630,20 @@ nav li {
   background-color: khaki;
 }
 
+/* Dorfplaner: Wasserversorgung */
+#pipeButton {
+  background-color: deepskyblue;
+}
+
+#pumpButton {
+  background-color: steelblue;
+  color: white;
+}
+
+#waterTowerButton {
+  background-color: lightsteelblue;
+}
+
 @media (max-height: 742px) {
   header {
     height: 15px;
@@ -1058,6 +1072,10 @@ main {
 
 #viewControls button:active {
   background-color: rgba(47, 79, 79, 1);
+}
+
+#viewControls button[aria-pressed="true"] {
+  background-color: #1f6fd1;
 }
 
 /* Dorfplaner: Doppeltippen auf Knöpfe soll in Safari nicht die Seite zoomen */

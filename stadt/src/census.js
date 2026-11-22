@@ -63,6 +63,9 @@ var rotate120Arrays = function() {
 Census.prototype.clearCensus = function() {
   this.poweredZoneCount = 0;
   this.unpoweredZoneCount = 0;
+  // Dorfplaner: Zonen mit und ohne Wasser
+  this.wateredZoneCount = 0;
+  this.unwateredZoneCount = 0;
   this.firePop = 0;
   this.roadTotal = 0;
   this.railTotal = 0;

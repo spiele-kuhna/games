@@ -26,6 +26,7 @@ import * as Messages from './messages.ts';
 import { MiscTiles } from './miscTiles.js';
 import { MiscUtils } from './miscUtils.js';
 import { PowerManager } from './powerManager.js';
+import { WaterManager } from './waterManager.js';
 import { RepairManager } from './repairManager.js';
 import { Residential } from './residential.js';
 import { Road } from './road.js';
@@ -53,6 +54,7 @@ var Simulation = EventEmitter(function (gameMap, gameLevel, speed, savedGame) {
 
   // Last time we relayed a message from PowerManager to the front-end
   this._lastPowerMessage = null;
+  this._lastWaterMessage = null;
 
   // And now, the main cast of characters
   this.evaluation = new Evaluation(this._gameLevel);
@@ -60,6 +62,8 @@ var Simulation = EventEmitter(function (gameMap, gameLevel, speed, savedGame) {
   this.budget = new Budget();
   this._census = new Census();
   this._powerManager = new PowerManager(this._map);
+  // Dorfplaner: Wasserversorgung (öffentlich, weil Werkzeuge und Darstellung die Rohrkarte brauchen)
+  this.waterManager = new WaterManager(this._map);
   this.spriteManager = new SpriteManager(this._map);
   this._mapScanner = new MapScanner(this._map);
   this._repairManager = new RepairManager(this._map);
@@ -155,6 +159,7 @@ Simulation.prototype.save = function(saveData) {
     saveData[saveProps[i]] = this[saveProps[i]];
 
   this._map.save(saveData);
+  this.waterManager.save(saveData);
   this.evaluation.save(saveData);
   this._valves.save(saveData);
   this.budget.save(saveData);
@@ -167,6 +172,7 @@ Simulation.prototype.load = function(saveData) {
     this[saveProps[i]] = saveData[saveProps[i]];
 
   this._map.load(saveData);
+  this.waterManager.load(saveData);
   this.evaluation.load(saveData);
   this._valves.load(saveData);
   this.budget.load(saveData);
@@ -237,6 +243,7 @@ Simulation.prototype._constructSimData = function() {
     repairManager: this._repairManager,
     powerManager: this._powerManager,
     simulator: this,
+    waterManager: this.waterManager,
     spriteManager: this.spriteManager,
     trafficManager: this._traffic,
     valves: this._valves
@@ -260,6 +267,16 @@ Simulation.prototype.init = function() {
     if (this._lastPowerMessage === null || d - this._lastPowerMessage > 1000 * 60 * 2) {
       this._emitEvent(Messages.FRONT_END_MESSAGE, {subject: Messages.NOT_ENOUGH_POWER});
       this._lastPowerMessage = d;
+    }
+  }.bind(this));
+
+  // Dorfplaner: Wassermangel melden (höchstens alle zwei Minuten, wie beim Strom)
+  this.waterManager.addEventListener(Messages.NOT_ENOUGH_WATER, function(e) {
+    var d = new Date();
+
+    if (this._lastWaterMessage === null || d - this._lastWaterMessage > 1000 * 60 * 2) {
+      this._emitEvent(Messages.FRONT_END_MESSAGE, {subject: Messages.NOT_ENOUGH_WATER});
+      this._lastWaterMessage = d;
     }
   }.bind(this));
 
@@ -292,6 +309,7 @@ Simulation.prototype.init = function() {
   var simData = this._constructSimData();
   this._mapScanner.mapScan(0, this._map.width, simData);
   this._powerManager.doPowerScan(this._census);
+  this.waterManager.doWaterScan();
   BlockMapUtils.pollutionTerrainLandValueScan(this._map, this._census, this.blockMaps);
   BlockMapUtils.crimeScan(this._census, this.blockMaps);
   BlockMapUtils.populationDensityScan(this._map, this.blockMaps);
@@ -361,8 +379,11 @@ var simulate = function(simData) {
       break;
 
     case 11:
-      if ((this._simCycle % speedPowerScan[speedIndex]) === 0)
+      if ((this._simCycle % speedPowerScan[speedIndex]) === 0) {
         this._powerManager.doPowerScan(this._census);
+        // Dorfplaner: Wasser direkt nach dem Strom, denn Pumpen brauchen Strom
+        this.waterManager.doWaterScan();
+      }
       break;
 
     case 12:
@@ -444,6 +465,17 @@ Simulation.prototype._sendMessages = function() {
     case 22:
       if (totalZonePop > 10 && powerPop === 0)
         this._emitEvent(Messages.FRONT_END_MESSAGE, {subject: Messages.NEED_ELECTRICITY});
+      break;
+
+    case 24:
+      // Dorfplaner: Wasserversorgung
+      if (totalZonePop > 10 && this.waterManager.pumpCount === 0) {
+        this._emitEvent(Messages.FRONT_END_MESSAGE, {subject: Messages.NEED_WATER});
+      } else {
+        var waterZones = this._census.wateredZoneCount + this._census.unwateredZoneCount;
+        if (waterZones > 0 && this._census.wateredZoneCount / waterZones < 0.7)
+          this._emitEvent(Messages.FRONT_END_MESSAGE, {subject: Messages.ZONES_WITHOUT_WATER});
+      }
       break;
 
     case 26:

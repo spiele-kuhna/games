@@ -78,9 +78,45 @@ BulldozerTool.prototype.layDoze = function(x, y) {
 };
 
 
+// Dorfplaner: In der Untergrundansicht entfernt die Planierraupe Wasserrohre statt der Kachel darüber.
+BulldozerTool.prototype.setWaterManager = function(waterManager) {
+  this._water = waterManager;
+};
+
+
+BulldozerTool.prototype.setUnderground = function(underground) {
+  this._underground = underground;
+};
+
+
+BulldozerTool.prototype.modifyIfEnoughFunding = function(budget) {
+  var pipe = this._pipeToRemove;
+  this._pipeToRemove = null;
+
+  var ok = Object.getPrototypeOf(BulldozerTool.prototype).modifyIfEnoughFunding.call(this, budget);
+  if (ok && pipe) {
+    this._water.setPipe(pipe.x, pipe.y, false);
+    this._water.refresh();
+  }
+  return ok;
+};
+
+
 BulldozerTool.prototype.doTool = function(x, y, blockMaps) {
   if (!this._map.testBounds(x, y))
     this.result = this.TOOLRESULT_FAILED;
+
+  this._pipeToRemove = null;
+  if (this._underground && this._water) {
+    if (this._water.hasPipe(x, y)) {
+      this.addCost(this.bulldozerCost);
+      this._pipeToRemove = {x: x, y: y};
+      this.result = this.TOOLRESULT_OK;
+    } else {
+      this.result = this.TOOLRESULT_FAILED;
+    }
+    return;
+  }
 
   var tile = this._worldEffects.getTile(x, y);
   var tileValue = tile.getValue();

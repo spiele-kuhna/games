@@ -53,6 +53,12 @@ MapScanner.prototype.mapScan = function(startX, maxX, simData) {
           simData.census.poweredZoneCount += 1;
         else
           simData.census.unpoweredZoneCount += 1;
+
+        // Dorfplaner: Wasserversorgung mitzählen
+        if (simData.waterManager.isWatered(x, y))
+          simData.census.wateredZoneCount += 1;
+        else
+          simData.census.unwateredZoneCount += 1;
       }
 
       for (var i = 0, l = this._actions.length; i < l; i++) {

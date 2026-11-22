@@ -127,6 +127,20 @@ ViewSwitcher.prototype.zoomAt = function(step, x, y) {
 };
 
 
+// Dorfplaner: Wasserversorgung – beide Ansichten zeigen Rohre und fehlendes Wasser
+ViewSwitcher.prototype.setWaterSource = function(water) {
+  this._top.setWaterSource(water);
+  this._iso.setWaterSource(water);
+};
+
+
+ViewSwitcher.prototype.setUnderground = function(underground) {
+  this.underground = underground;
+  this._top.setUnderground(underground);
+  this._iso.setUnderground(underground);
+};
+
+
 // Winterkacheln betreffen nur die Draufsicht
 ViewSwitcher.prototype.changeTileSet = function(tileSet) {
   this._top.changeTileSet(tileSet);

@@ -205,7 +205,7 @@ Diese Karten werden **nur gelesen**, wenn wir später eine Übersichtskarte mit 
 Im Original legt `storage.js` genau einen Spielstand als JSON in `localStorage` unter dem Schlüssel
 `micropolisJSGame` ab (Version 3). `GameMap.save()` schreibt jede Kachel als `{value: <16-Bit-Zahl>}`. Ältere
 Versionen werden beim Laden über `transitionOldSave()` angehoben – an dieser Stelle hängen wir später die Höhenkarte
-an (Version 4).
+an (Version 5; Version 4 ist inzwischen die Wasserversorgung, siehe 4.4).
 
 **Dorfplaner: mehrere Spielstände.** Der Inhalt eines Spielstands bleibt unverändert; neu ist nur die Ablage:
 
@@ -274,7 +274,28 @@ Wohnen ──fährt zu──▶ Gewerbe ──fährt zu──▶ Industrie ─�
 
 Der **Verkehr** ist damit kein eigener Schritt, sondern entsteht beim Abarbeiten der Zonen.
 
-### 4.4 Ergebnisse nach außen
+### 4.4 Dorfplaner: Wasserversorgung
+
+Nach dem Vorbild des Stromnetzes (`powerManager.js`), aber als eigener Baustein:
+
+| Datei | Aufgabe |
+|---|---|
+| `src/water/waterRules.ts` | reine Regeln mit Unit-Tests: Pumpenleistung, Bilanz mit Wassertürmen, Netzsuche, Wachstumsgrenze, Schonfrist, Kodierung der Rohrkarte |
+| `src/waterManager.js` | Rohrkarte (`pipeMap`), Ergebnis je Kachel (`waterGridMap`), Turmfüllstände; `doWaterScan()` in Phase 11 direkt nach der Strom-Berechnung |
+| `src/waterTools.js` | Werkzeuge Wasserrohr (schreibt in die Rohrkarte, nicht auf die Kachel), Pumpe, Wasserturm |
+| `src/water/waterIcons.ts` | Tropfen, Rohrfarben – gemeinsam für Draufsicht und 3D-Ansicht |
+
+Regeln: Wasser fließt von Pumpen (mit Strom; am Wasser doppelte Leistung) und Türmen durch Rohre **und Gebäude**.
+Jede Gebäudekachel verbraucht eine Einheit. Türme füllen sich mit Überschuss und geben bei Engpässen ab.
+Wohn-, Gewerbe- und Industriezonen ohne Wasser wachsen nur bis Stufe 1; dichtere fallen nach einer Schonfrist
+(1 Spieljahr, auch nach dem Laden eines alten Spielstands) gelegentlich eine Stufe zurück.
+
+Eingriffe in die Simulation (mit Freigabe): neuer Schritt in `simulation.js`, Zählung in `mapScanner.js`/`census.js`,
+je eine Abfrage in `residential.js`, `commercial.js`, `industrial.js`. Neue Kachelwerte `PUMP = 1020` und
+`WATER_TOWER = 1021` (die letzten freien Nummern; ihre Draufsicht-Bilder zeichnet `tileSet.js` selbst).
+Speicherformat Version 4: zusätzlich `pipes` (Lauflängen-Text), `waterTowers`, `waterGraceUntil`.
+
+### 4.5 Ergebnisse nach außen
 
 Die Simulation zeichnet nichts. Sie schickt **Events** (`messages.ts`) wie `FUNDS_CHANGED`, `DATE_UPDATED`,
 `VALVES_UPDATED` oder `FRONT_END_MESSAGE`. `Game` hört darauf und aktualisiert Infoleiste, R/C/I-Balken und
@@ -376,6 +397,7 @@ Einzelheiten:
 | `game.js`, `handlePause` | Kommentar: zwischen den Tempostufen gebe es noch keinen echten Unterschied. Tatsächlich ändern sie den Mindestabstand (100/50/10 ms) und die Häufigkeit der Phasen 11–15. | Tempomenü in der neuen Bedienung kann `setSpeed()` direkt nutzen |
 | `test/bounds.ts` | Zwei Tests erwarten Prüfungen, die im Code auskommentiert sind; in Dorfplaner übersprungen. | – |
 | `gameCanvas.js:352` | wirft in einem Fehlerfall die undefinierte Variable `e` | beim Ersetzen durch `IsoCanvas` nicht übernehmen |
+| `residential.js`, `growZone`/`degradeZone` | Die Formeln für die Stufe passen nicht zu `getZonePopulation` (Bevölkerung 24/32/40/48): Beim Wachsen springt ein Wohnblock von Stufe 0 auf 2 bzw. 1 auf 3, beim Rückgang bleibt er auf derselben Stufe. | Nicht verändert (Simulation, eigene Freigabe nötig). Die Wasserregel rechnet die Stufen selbst richtig (`waterRules.ts`). |
 
 ## 8. Stellen, die für das Ziel-Feature angepasst werden
 
@@ -413,8 +435,9 @@ Touch, Symbolleiste, Menü, Übersichtskarte). Entscheidungen und Begründung: `
 | `src/mapGenerator.js` | Höhen erzeugen; Wasser nur in Senken |
 | `src/buildingTool.js`, `roadTool.js`, `railTool.js`, `wireTool.js`, `parkTool.js` | Bauregeln am Hang (Gebäude nur eben, Netze max. 1 Stufe) |
 | **neu** Werkzeug „Planieren“ | Gelände angleichen gegen Geld |
-| `src/storage.js` | Version 4, alte Spielstände mit Höhe 0 laden |
+| `src/storage.js` | Version 5, alte Spielstände mit Höhe 0 laden |
 | `src/iso/*` | Hangkacheln zeichnen, Picking mit Höhe |
 
-Nicht angefasst werden: `simulation.js`, `mapScanner.js`, Zonen-, Strom-, Verkehrs-, Budget- und
-Bewertungslogik. Wenn sich das später doch als nötig erweist, wird es vorher begründet.
+Nicht angefasst werden: Strom-, Verkehrs-, Budget- und Bewertungslogik. Bisherige begründete und freigegebene
+Eingriffe: Verkehrsfehler in `traffic.js` und die Wasserversorgung (4.4). Weitere Eingriffe nur nach Begründung
+und Freigabe.
