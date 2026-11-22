@@ -136,6 +136,9 @@ export interface WaterLook {
 interface RenderedImage {
     canvas: HTMLCanvasElement;
     headroom: number;
+    /** belegter Bereich oben links auf canvas (Gerätepixel) */
+    width: number;
+    height: number;
 }
 
 /** Ein zwischengespeichertes Kachelbild: Ausschnitt (sx, sy, sw, sh) aus einer Sammelbild-Seite. */
@@ -161,6 +164,37 @@ export class IsoTilePainter {
 
     private cache: { [key: string]: CachedImage } = {};
     private pages: HTMLCanvasElement[] = [];
+    /** So viele Millisekunden dürfen je Bild für neue Kachelbilder draufgehen … */
+    private budget = Infinity;
+    /** … und so viele sind in diesem Bild schon verbraucht */
+    private spent = 0;
+    /** Kachelbilder einer anderen Zoomstufe als Ersatz, solange die eigenen noch fehlen */
+    private fallback: IsoTilePainter | null = null;
+    /** In diesem Bild fehlten Kachelbilder (dann bald noch einmal zeichnen) */
+    incomplete = false;
+    /** Eine wiederverwendete Zeichenfläche für neue Kachelbilder (ein neues Canvas je Bild wäre teuer) */
+    private scratch: HTMLCanvasElement | null = null;
+
+    /**
+     * Zeichenfläche für ein neues Kachelbild mit headroom Pixeln über der Raute vorbereiten: Bereich leeren,
+     * (0, 0) auf die obere Rautenspitze legen, in CSS-Pixeln zeichnen.
+     */
+    private beginImage(headroom: number): { canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D,
+                                            width: number, height: number } {
+        const width = Math.ceil(this.tileWidth * this.pixelRatio);
+        const height = Math.ceil((this.tileHeight + headroom) * this.pixelRatio);
+        if (this.scratch === null || this.scratch.width < width || this.scratch.height < height) {
+            this.scratch = document.createElement("canvas");
+            this.scratch.width = Math.max(width, this.scratch ? this.scratch.width : 0);
+            this.scratch.height = Math.max(height, this.scratch ? this.scratch.height : 0, width * 4);
+        }
+        const ctx = this.scratch.getContext("2d") as CanvasRenderingContext2D;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalAlpha = 1;
+        ctx.lineCap = "butt";
+        ctx.clearRect(0, 0, width, height);
+        return { canvas: this.scratch, ctx, height, width };
+    }
     private shelfX = 0;
     private shelfY = 0;
     private shelfHeight = 0;
@@ -186,7 +220,31 @@ export class IsoTilePainter {
     }
 
     /** Zeichnet eine Kachel, deren obere Rautenspitze bei (sx, sy) liegt. */
+    /*
+     * Beginn eines Bilds: neue Kachelbilder höchstens budgetMs lang zeichnen. Was dann noch fehlt, kommt aus der
+     * vorherigen Zoomstufe (vergrößert/verkleinert) und wird in den nächsten Bildern nachgeholt. So gibt es beim
+     * Zoomen keinen langen Hänger.
+     */
+    beginFrame(budgetMs: number, fallback: IsoTilePainter | null): void {
+        this.budget = budgetMs;
+        this.spent = 0;
+        this.fallback = fallback;
+        this.incomplete = false;
+    }
+
     drawTile(ctx: CanvasRenderingContext2D, sx: number, sy: number, request: PaintRequest): void {
+        const key = this.keyFor(request);
+        if (!this.cache[key] && this.spent >= this.budget) {
+            this.incomplete = true;
+            const old = this.fallback ? this.fallback.cache[key] : undefined;
+            if (old && this.fallback) {
+                const scale = this.tileWidth / this.fallback.tileWidth;
+                const headroom = old.headroom * scale;
+                ctx.drawImage(old.page, old.sx, old.sy, old.sw, old.sh, sx - this.tileWidth / 2, sy - headroom,
+                              this.tileWidth, this.tileHeight + headroom);
+            }
+            return;
+        }
         const image = this.imageFor(request);
         ctx.drawImage(image.page, image.sx, image.sy, image.sw, image.sh, sx - this.tileWidth / 2, sy - image.headroom,
                       this.tileWidth, this.tileHeight + image.headroom);
@@ -194,8 +252,8 @@ export class IsoTilePainter {
 
     /** Frisch gezeichnetes Bild ins Sammelbild kopieren und den Ausschnitt merken. */
     private store(image: RenderedImage): CachedImage {
-        const w = image.canvas.width;
-        const h = image.canvas.height;
+        const w = image.width;
+        const h = image.height;
         if (this.pages.length > 0 && this.shelfX + w > ATLAS_PAGE) {
             // nächstes Regalbrett
             this.shelfX = 0;
@@ -217,7 +275,8 @@ export class IsoTilePainter {
             this.shelfHeight = 0;
         }
         const page = this.pages[this.pages.length - 1];
-        (page.getContext("2d") as CanvasRenderingContext2D).drawImage(image.canvas, this.shelfX, this.shelfY);
+        (page.getContext("2d") as CanvasRenderingContext2D).drawImage(image.canvas, 0, 0, w, h, this.shelfX, this.shelfY,
+                                                                       w, h);
         const cached = { headroom: image.headroom, page, sh: h, sw: w, sx: this.shelfX, sy: this.shelfY };
         this.shelfX += w + 1;
         this.shelfHeight = Math.max(this.shelfHeight, h);
@@ -230,6 +289,18 @@ export class IsoTilePainter {
     }
 
     private imageFor(request: PaintRequest): CachedImage {
+        const key = this.keyFor(request);
+        let image = this.cache[key];
+        if (!image) {
+            const start = performance.now();
+            image = this.store(this.renderImage(request));
+            this.cache[key] = image;
+            this.spent += performance.now() - start;
+        }
+        return image;
+    }
+
+    private keyFor(request: PaintRequest): string {
         const look = request.look;
         const b = request.building;
         const key = [look.ground, look.cover, look.zone, look.roads, look.rails, look.wires, look.bridge,
@@ -241,12 +312,7 @@ export class IsoTilePainter {
                      request.bridgeHeights ? [request.bridgeHeights.north, request.bridgeHeights.east,
                                               request.bridgeHeights.south, request.bridgeHeights.west].join(",")
                                            : "-", request.deckOnly ? "deck" : ""].join("|");
-        let image = this.cache[key];
-        if (!image) {
-            image = this.store(this.renderImage(request));
-            this.cache[key] = image;
-        }
-        return image;
+        return key;
     }
 
     private renderImage(request: PaintRequest): RenderedImage {
@@ -255,14 +321,9 @@ export class IsoTilePainter {
         }
         if (request.deckOnly && request.bridgeHeights) {
             // nur die Brückenfahrbahn, ringsum durchsichtig
-            const canvas = document.createElement("canvas");
-            canvas.width = Math.ceil(this.tileWidth * this.pixelRatio);
-            canvas.height = Math.ceil((this.tileHeight + this.headroom) * this.pixelRatio);
-            const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
-            ctx.scale(this.pixelRatio, this.pixelRatio);
-            ctx.translate(this.tileWidth / 2, this.headroom);
-            this.drawElevatedBridge(ctx, request.look.roads, request.bridgeHeights);
-            return { canvas, headroom: this.headroom };
+            const area = this.beginImage(this.headroom);
+            this.drawElevatedBridge(area.ctx, request.look.roads, request.bridgeHeights);
+            return { canvas: area.canvas, headroom: this.headroom, height: area.height, width: area.width };
         }
         const noWater = request.water ? request.water.noWater : false;
         // Gebäude brauchen mehr Platz nach oben als flache Kacheln. Ganz flache Kacheln (Wiese, Wasser, Straße,
@@ -276,14 +337,9 @@ export class IsoTilePainter {
         if (request.smoke || request.lightning || noWater) {
             headroom += Math.ceil(this.tileWidth * 0.5);   // Platz für Rauchwolken, Blitz bzw. Tropfen
         }
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.ceil(this.tileWidth * this.pixelRatio);
-        canvas.height = Math.ceil((this.tileHeight + headroom) * this.pixelRatio);
-        const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
-
-        // Ab hier zeichnen wir in CSS-Pixeln; (0, 0) ist die obere Spitze der Raute.
-        ctx.scale(this.pixelRatio, this.pixelRatio);
-        ctx.translate(this.tileWidth / 2, headroom);
+        const area = this.beginImage(headroom);
+        const canvas = area.canvas;
+        const ctx = area.ctx;
 
         const look = request.look;
         this.drawGround(ctx, request);
@@ -310,7 +366,7 @@ export class IsoTilePainter {
             const c = this.localToScreen(0.5, 0.5, top + this.tileWidth * 0.12);
             drawWaterDrop(ctx, c.x + this.tileWidth * 0.14, c.y, this.tileWidth * 0.22);
         }
-        return { canvas, headroom };
+        return { canvas, headroom, height: area.height, width: area.width };
     }
 
     /*
@@ -319,12 +375,9 @@ export class IsoTilePainter {
      */
     private renderUnderground(request: PaintRequest, water: WaterLook): RenderedImage {
         const headroom = Math.ceil(this.tileWidth * 0.06);
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.ceil(this.tileWidth * this.pixelRatio);
-        canvas.height = Math.ceil((this.tileHeight + headroom) * this.pixelRatio);
-        const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
-        ctx.scale(this.pixelRatio, this.pixelRatio);
-        ctx.translate(this.tileWidth / 2, headroom);
+        const area = this.beginImage(headroom);
+        const canvas = area.canvas;
+        const ctx = area.ctx;
 
         this.drawGround(ctx, request);
         if (request.look.roads !== 0) { this.drawRoads(ctx, request.look.roads, request.look.bridge); }
@@ -357,7 +410,7 @@ export class IsoTilePainter {
             this.fillLocalRect(ctx, 0.15, 0.15, 0.85, 0.85, "rgba(255, 255, 255, 0.25)");
             drawWaterDrop(ctx, c.x, c.y - this.tileWidth * 0.08, this.tileWidth * 0.25);
         }
-        return { canvas, headroom };
+        return { canvas, headroom, height: area.height, width: area.width };
     }
 
     /*

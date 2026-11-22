@@ -44,6 +44,9 @@ interface WaterSourceLike {
     kindAt(x: number, y: number): number;
 }
 
+/** So viele Zoomstufen behalten ihre fertigen Kachelbilder (je Stufe einige Sammelbild-Seiten Speicher) */
+const KEPT_PAINTERS = 3;
+
 /** Sprite-Art Schiff (spriteConstants.ts) */
 const SHIP_SPRITE = 4;
 
@@ -130,6 +133,10 @@ export class IsoCanvas {
     private animation: AnimationLike | null = null;
     private sprites: SpriteSource | null = null;
     private water: WaterSourceLike | null = null;
+    /** Zeichner der vorherigen Zoomstufe – liefert Ersatzbilder, bis die neuen fertig sind */
+    private previousPainter: IsoTilePainter | null = null;
+    /** Zeichner der zuletzt benutzten Zoomstufen (mit ihren fertigen Kachelbildern) */
+    private recentPainters: IsoTilePainter[] = [];
     private underground = false;
     private trafficSource: TrafficSource | null = null;
     /** Takt für Autos auf Straßen mit wenig Verkehr (viermal pro Sekunde ein Schritt) */
@@ -154,6 +161,14 @@ export class IsoCanvas {
         this.measure();
         this.dimensionsChanged = true;
         this.centreOn(Math.floor(map.width / 2), Math.floor(map.height / 2));
+    }
+
+    /** Zoomstufe gewechselt: aktuellen Zeichner als Ersatz behalten, neuen bei Bedarf anlegen */
+    private dropPainter(): void {
+        if (this.painter !== null) {
+            this.previousPainter = this.painter;
+        }
+        this.painter = null;
     }
 
     /** Dorfplaner: Wassernetz für Rohre und Tropfen */
@@ -186,7 +201,7 @@ export class IsoCanvas {
         }
         const centre = this.centreTile();
         this.tileWidth = tileWidth;
-        this.painter = null;
+        this.dropPainter();
         this.centreOnView(centre.x, centre.y);
     }
 
@@ -201,7 +216,7 @@ export class IsoCanvas {
         }
         const origin = zoomOrigin(this.originX, this.originY, x, y, this.tileWidth, newWidth);
         this.tileWidth = newWidth;
-        this.painter = null;
+        this.dropPainter();
         this.originX = origin.x;
         this.originY = origin.y;
         this.keepMapInView();
@@ -340,7 +355,10 @@ export class IsoCanvas {
         this.trafficTick = isPaused === true ? this.trafficTick : Math.floor(Date.now() / CAR_STEP_MS);
         const waterState = this.water ? [this.underground ? 1 : 0, this.water.revision, blinkOn(Date.now()) ? 1 : 0].join(",")
                                       : "-";
-        const signature = [waterState, this.trafficTick, this.canvasWidth, this.canvasHeight, this.tileWidth, this.rotation, this.originX,
+        // Fahrzeuge unterwegs: jedes Bild neu zeichnen, damit die Überblendung weich läuft
+        const moving = sprites.some((s) => s.movedAt !== undefined && Date.now() - (s.movedAt as number) < 1000)
+            ? Math.floor(Date.now() / 16) : 0;
+        const signature = [moving, waterState, this.trafficTick, this.canvasWidth, this.canvasHeight, this.tileWidth, this.rotation, this.originX,
                            this.originY, mouse ? [mouse.x, mouse.y, mouse.width, mouse.colour].join(",") : "-",
                            rect ? [rect.minX, rect.maxX, rect.minY, rect.maxY].join(",") : "-",
                            sprites.map((s) => [s.type, s.frame, s.x, s.y].join(",")).join(";")].join("|");
@@ -356,7 +374,14 @@ export class IsoCanvas {
         ctx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
 
         if (rect !== null) {
+            // neue Kachelbilder höchstens 8 ms je Bild; der Rest kommt vorerst aus der vorherigen Zoomstufe
+            painter.beginFrame(8, this.previousPainter);
             this.drawTiles(ctx, rect, map, view, painter);
+            if (painter.incomplete) {
+                this.lastSignature = "";   // im nächsten Bild weiterzeichnen
+            } else {
+                this.previousPainter = null;   // alles da: Ersatzbilder werden nicht mehr gebraucht
+            }
         }
         if (!this.underground) {
             // Schiffe zuerst, darüber die Brücken in ihrer Nähe (das Schiff fährt darunter durch), dann der Rest
@@ -513,7 +538,7 @@ export class IsoCanvas {
         const done: { [key: string]: boolean } = {};
         const tiles: Array<[number, number]> = [];
         for (const ship of ships) {
-            const centre = spriteCentre(ship);
+            const centre = spriteCentre(ship, Date.now());
             const point = this.mapPointToViewPoint(centre.x, centre.y, map);
             for (let dy = -1; dy <= 1; dy++) {
                 for (let dx = -1; dx <= 1; dx++) {
@@ -542,8 +567,9 @@ export class IsoCanvas {
     }
 
     private drawSprites(ctx: CanvasRenderingContext2D, sprites: SpriteLike[], map: MapLike, view: ViewParams): void {
+        const now = Date.now();
         for (const sprite of sprites) {
-            const centre = spriteCentre(sprite);
+            const centre = spriteCentre(sprite, now);
             const point = this.mapPointToViewPoint(centre.x, centre.y, map);
             const ground = projectToScreen(point.x, point.y, 0, view);
             drawSprite(ctx, sprite, ground.x, ground.y, this.tileWidth, this.rotation);
@@ -790,7 +816,13 @@ export class IsoCanvas {
 
     private requirePainter(): IsoTilePainter {
         if (this.painter === null) {
-            this.painter = new IsoTilePainter(this.tileWidth, this.pixelRatio);
+            // Zeichner dieser Zoomstufe wiederverwenden, wenn wir ihn noch haben (Kachelbilder schon fertig)
+            const kept = this.recentPainters.filter((pt) => pt.tileWidth === this.tileWidth &&
+                                                             pt.pixelRatio === this.pixelRatio)[0];
+            this.painter = kept || new IsoTilePainter(this.tileWidth, this.pixelRatio);
+            // zuletzt benutzte Zoomstufen vorn, höchstens KEPT_PAINTERS (Speicher)
+            this.recentPainters = [this.painter].concat(this.recentPainters.filter((pt) => pt !== this.painter))
+                .slice(0, KEPT_PAINTERS);
         }
         return this.painter;
     }

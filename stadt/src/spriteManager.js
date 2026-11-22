@@ -92,7 +92,11 @@ SpriteManager.prototype.moveObjects = function(simData, shouldMove) {
     if (shouldMove && !shouldMove(sprite))
       continue;
 
-    sprite.move(this.spriteCycle, disasterManager, blockMaps);
+    // Dorfplaner: Jedes Sprite zählt seinen eigenen Takt. Züge entscheiden nur jeden vierten Takt über die
+    // Richtung – genau dann, wenn sie in der Mitte einer Kachel stehen. Würde ein langsames Sprite den
+    // gemeinsamen Takt sehen, läge diese Entscheidung auf halben Kacheln (Zug neben den Gleisen).
+    sprite.ownCycle = (sprite.ownCycle || 0) + 1;
+    sprite.move(shouldMove ? sprite.ownCycle : this.spriteCycle, disasterManager, blockMaps);
   }
 
   this.pruneDeadSprites();

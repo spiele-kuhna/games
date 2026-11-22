@@ -60,6 +60,11 @@ export interface SpriteLike {
     readonly frame: number;
     /** Dorfplaner: Flughöhe 0 … 1 (Flugzeug beim Start und Anflug, Hubschrauber beim Landen) */
     readonly altitude?: number;
+    /** Dorfplaner: Position vor dem letzten Schritt, Zeitpunkt und Dauer – für weiches Überblenden */
+    readonly shownFromX?: number;
+    readonly shownFromY?: number;
+    readonly movedAt?: number;
+    readonly moveInterval?: number;
     readonly x: number;
     readonly y: number;
     readonly xOffset: number;
@@ -68,11 +73,31 @@ export interface SpriteLike {
 }
 
 /** Mittelpunkt eines Sprites in Kartenkoordinaten (Kacheln). Sprites rechnen in Pixeln der Draufsicht (16 je Kachel). */
-export function spriteCentre(sprite: SpriteLike): { x: number, y: number } {
+export function spriteCentre(sprite: SpriteLike, now = 0): { x: number, y: number } {
+    const shown = interpolatedPosition(sprite, now);
     return {
-        x: (sprite.x + sprite.xOffset + sprite.width / 2) / 16,
-        y: (sprite.y + sprite.yOffset + sprite.width / 2) / 16,
+        x: (shown.x + sprite.xOffset + sprite.width / 2) / 16,
+        y: (shown.y + sprite.yOffset + sprite.width / 2) / 16,
     };
+}
+
+/*
+ * Dorfplaner: Die Simulation bewegt Fahrzeuge in Schritten (Flugzeug 8 Pixel alle 180 ms). Für die Anzeige
+ * blenden wir zwischen alter und neuer Position über, damit die Bewegung weich wirkt. Große Sprünge
+ * (z. B. neues Fahrzeug) werden nicht überblendet. now = 0 heißt: keine Überblendung.
+ */
+export function interpolatedPosition(sprite: SpriteLike, now: number): { x: number, y: number } {
+    if (now === 0 || sprite.shownFromX === undefined || sprite.shownFromY === undefined ||
+        sprite.movedAt === undefined || !sprite.moveInterval) {
+        return { x: sprite.x, y: sprite.y };
+    }
+    const dx = sprite.x - sprite.shownFromX;
+    const dy = sprite.y - sprite.shownFromY;
+    if (Math.abs(dx) > 32 || Math.abs(dy) > 32) {
+        return { x: sprite.x, y: sprite.y };
+    }
+    const t = Math.max(0, Math.min(1, (now - sprite.movedAt) / sprite.moveInterval));
+    return { x: sprite.shownFromX + dx * t, y: sprite.shownFromY + dy * t };
 }
 
 /** Wie hoch über dem Boden fliegt ein Sprite? (in Rautenbreiten) */

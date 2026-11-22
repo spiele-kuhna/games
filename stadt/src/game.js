@@ -875,11 +875,17 @@ var commonAnimate = function() {
     while (now - this._lastSpriteMove >= SPRITE_STEP_MS && steps < 3) {
       // Flugzeuge und Hubschrauber nur jeden dritten, Züge jeden zweiten Schritt
       var step = this._spriteStep = (this._spriteStep || 0) + 1;
+      var movedAt = this._lastSpriteMove + SPRITE_STEP_MS;
       this.simulation.spriteManager.moveObjects(this.simulation._constructSimData(), function(sprite) {
-        if (sprite.type === SPRITE_AIRPLANE || sprite.type === SPRITE_HELICOPTER)
-          return step % 3 === 0;
-        if (sprite.type === SPRITE_TRAIN)
-          return step % 2 === 0;
+        var every = sprite.type === SPRITE_AIRPLANE || sprite.type === SPRITE_HELICOPTER ? 3 :
+                    sprite.type === SPRITE_TRAIN ? 2 : 1;
+        if (step % every !== 0)
+          return false;
+        // Für die Anzeige: Position vor dem Schritt und Dauer bis zum nächsten Schritt (weiches Überblenden)
+        sprite.shownFromX = sprite.x;
+        sprite.shownFromY = sprite.y;
+        sprite.movedAt = movedAt;
+        sprite.moveInterval = every * SPRITE_STEP_MS;
         return true;
       });
       this._lastSpriteMove += SPRITE_STEP_MS;
