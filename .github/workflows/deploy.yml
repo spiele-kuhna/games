@@ -1,0 +1,73 @@
+name: Build & Deploy spiele.kuhna.cloud
+
+# Jeder Push auf main veröffentlicht. Gepusht wird nur nach Freigabe im Chat.
+# Der Upload löscht nie Dateien auf dem Server.
+# Die Platzhaltersperre ist die Notbremse für unvollständige Angaben (Impressum, Datenschutz).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-live
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: stadt/package-lock.json
+
+      # --ignore-scripts: keine Install-Skripte fremder Pakete ausführen; der Build braucht sie nicht.
+      - name: Dorfplaner – Abhängigkeiten
+        working-directory: stadt
+        run: npm ci --ignore-scripts
+
+      - name: Dorfplaner – Tests
+        working-directory: stadt
+        run: npx jest --coverage=false
+
+      - name: Dorfplaner – Build
+        working-directory: stadt
+        run: npm run build
+
+      - name: Website zusammenstellen
+        run: |
+          mkdir -p site/stadt
+          cp -r stadt/dist/. site/stadt/
+          cp portal/index.html site/index.html
+          find site -maxdepth 2 | sort
+
+      # Offene Platzhalter dürfen nie live gehen.
+      - name: Keine offenen Platzhalter
+        run: |
+          if grep -rl "\[OFFEN" site; then
+            echo "::error::Im Build stehen noch [OFFEN: …]-Platzhalter – Deploy abgebrochen."
+            exit 1
+          fi
+
+      - name: lftp installieren
+        run: sudo apt-get update && sudo apt-get install -y lftp
+
+      # Passwort über LFTP_PASSWORD/--env-password: Sonderzeichen im Passwort zerbrechen sonst die Angabe.
+      # Host und Benutzer werden von Leerzeichen/Zeilenumbrüchen aus dem Secret befreit.
+      - name: Hochladen per SFTP
+        env:
+          SFTP_HOST: ${{ secrets.SFTP_HOST }}
+          SFTP_USER: ${{ secrets.SFTP_USER }}
+          LFTP_PASSWORD: ${{ secrets.SFTP_PASS }}
+        run: |
+          HOST=$(printf '%s' "$SFTP_HOST" | tr -d '[:space:]'); HOST=${HOST#sftp://}
+          NUTZER=$(printf '%s' "$SFTP_USER" | tr -d '[:space:]')
+          echo "Host gesetzt: ${#HOST} Zeichen, Benutzer: ${#NUTZER} Zeichen, Passwort: ${#LFTP_PASSWORD} Zeichen"
+          lftp -u "$NUTZER" --env-password "sftp://$HOST" -e "set cmd:fail-exit yes; set sftp:auto-confirm yes; set net:max-retries 2; set net:timeout 20; pwd; mirror -R --parallel=4 --verbose=1 site/ ./; cls -1; bye"
