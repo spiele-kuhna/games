@@ -1554,9 +1554,15 @@ function drawVehicle(ctx: CanvasRenderingContext2D, g: LocalGeometry, v: Vehicle
 function drawSign(ctx: CanvasRenderingContext2D, g: LocalGeometry, s: Sign): void {
     const w = g.tileWidth;
     const c = g.localToScreen(s.u, s.v, s.z * w + w * 0.06);
-    const size = Math.max(7, Math.round(w * (s.text.length > 3 ? 0.09 : 0.15)));
+    // Schrift so wählen, dass das Schild auf die Kachel passt (sonst schneidet das Kachelbild es ab)
+    let size = Math.round(w * (s.text.length > 3 ? 0.09 : 0.15));
     ctx.font = "bold " + size + "px sans-serif";
-    const width = ctx.measureText(s.text).width + size * 0.6;
+    const fit = (w * 0.9) / (ctx.measureText(s.text).width + size * 0.6);
+    if (fit < 1) {
+        size = Math.max(4, Math.floor(size * fit));
+        ctx.font = "bold " + size + "px sans-serif";
+    }
+    const width = Math.min(w * 0.94, ctx.measureText(s.text).width + size * 0.6);
     const height = size * 1.3;
     ctx.fillStyle = s.background;
     ctx.fillRect(c.x - width / 2, c.y - height / 2, width, height);

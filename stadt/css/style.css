@@ -1137,3 +1137,71 @@ button, input[type="submit"] {
 #saveContainer button {
   margin: 4px;
 }
+
+
+/* Dorfplaner: Werkzeugleiste mit Symbolen (src/ui/toolIcons.ts) */
+#controls {
+  width: auto;
+  height: auto;
+  padding: 6px 8px 8px;
+}
+
+#toolInfo {
+  min-width: 228px;
+  padding-bottom: 4px;
+  white-space: nowrap;
+}
+
+#buttons {
+  display: grid;
+  grid-template-columns: repeat(5, 42px);
+  gap: 5px;
+  justify-content: center;
+}
+
+#buttons .toolButton {
+  width: 42px;
+  height: 42px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+#buttons .toolButton svg {
+  pointer-events: none;
+}
+
+#buttons .toolButton.selected {
+  border: 1px solid #000;
+  box-shadow: 0 0 0 3px #ffd23f;
+}
+
+#buttons .toolButton:hover {
+  filter: brightness(1.12);
+}
+
+/* Reihenfolge nach Gruppen: Zonen, Verkehr | Strom, Wasser | Wasser, Dienste | Fernverkehr, Werkzeuge */
+#residentialButton { order: 1; }
+#commercialButton { order: 2; }
+#industrialButton { order: 3; }
+#roadButton { order: 4; }
+#railButton { order: 5; }
+#wireButton { order: 6; }
+#coalButton { order: 7; }
+#nuclearButton { order: 8; }
+#pipeButton { order: 9; }
+#pumpButton { order: 10; }
+#waterTowerButton { order: 11; }
+#policeButton { order: 12; }
+#fireButton { order: 13; }
+#parkButton { order: 14; }
+#stadiumButton { order: 15; }
+#portButton { order: 16; }
+#airportButton { order: 17; }
+#bulldozerButton { order: 18; }
+#queryButton { order: 19; }

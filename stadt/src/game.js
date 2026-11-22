@@ -41,6 +41,7 @@ import { Simulation } from './simulation.js';
 import { Storage } from './storage.js';
 import { Text } from './text.js';
 import { TouchWarnWindow } from './touchWarnWindow.js';
+import { decorateToolButtons } from './ui/toolIcons.ts';
 
 var disasterTimeout = 20 * 1000;
 
@@ -84,6 +85,8 @@ function Game(gameMap, tileSet, snowTileSet, spriteSheet, difficulty, name) {
   this.gameCanvas.setWaterSource(this.simulation.waterManager);
   this.gameCanvas.setMode(ViewSwitcher.loadPreference());
   this.setupViewControls();
+  // Dorfplaner: Werkzeugknöpfe mit Symbolen statt Text (vor InputStatus, das die Knöpfe anmeldet)
+  decorateToolButtons(document);
   this.inputStatus = new InputStatus(this.gameMap, tileSet.tileWidth, this.simulation.waterManager);
   this.setupUnderground();
   // Dorfplaner: Maus und Finger auf der Karte wirken auf die gerade aktive Ansicht
@@ -384,6 +387,10 @@ Game.prototype.load = function(saveData) {
   BaseTool.load(saveData);
   this.simulation.load(saveData);
 };
+
+
+// Dorfplaner: Abstand zwischen zwei Bewegungsschritten der Fahrzeuge in Millisekunden (etwa 16 Schritte je Sekunde)
+var SPRITE_STEP_MS = 60;
 
 
 var nextFrame =
@@ -829,8 +836,19 @@ var commonAnimate = function() {
     return;
   }
 
-  if (!this.isPaused)
-    this.simulation.spriteManager.moveObjects(this.simulation._constructSimData());
+  // Dorfplaner: Fahrzeuge (Zug, Flugzeug, Hubschrauber, Schiff …) in festem Takt bewegen statt bei jedem Bild.
+  // Vorher hing ihr Tempo von der Bildwiederholrate ab (60 Hz, auf 120-Hz-Bildschirmen doppelt so schnell).
+  if (!this.isPaused) {
+    var now = Date.now();
+    if (!this._lastSpriteMove || now - this._lastSpriteMove > 1000)
+      this._lastSpriteMove = now - SPRITE_STEP_MS;
+    var steps = 0;
+    while (now - this._lastSpriteMove >= SPRITE_STEP_MS && steps < 3) {
+      this.simulation.spriteManager.moveObjects(this.simulation._constructSimData());
+      this._lastSpriteMove += SPRITE_STEP_MS;
+      steps++;
+    }
+  }
 
   var sprites = this.calculateSpritesForPaint(this.gameCanvas);
   this.gameCanvas.paint(this.mouse, sprites, this.isPaused);

@@ -82,14 +82,6 @@ export function flightHeight(type: number): number {
     }
 }
 
-/*
- * Ein Punkt neben (x, y) auf dem Bildschirm: du Kacheln in Ansichtsrichtung +vx, dv in Richtung +vy,
- * z Pixel nach oben. Damit lassen sich kleine schräge Quader zeichnen.
- */
-function offset(x: number, y: number, tileWidth: number, du: number, dv: number, z: number) {
-    return { x: x + (du - dv) * tileWidth / 2, y: y + (du + dv) * tileWidth / 4 - z };
-}
-
 function fillPolygon(ctx: CanvasRenderingContext2D, points: Array<{ x: number, y: number }>, colour: string): void {
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
@@ -99,18 +91,6 @@ function fillPolygon(ctx: CanvasRenderingContext2D, points: Array<{ x: number, y
     ctx.closePath();
     ctx.fillStyle = colour;
     ctx.fill();
-}
-
-/** Quader um den Punkt (x, y), halbe Kantenlängen a (Richtung vx) und b (Richtung vy), Höhe h, ab Höhe z0. */
-function box(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, a: number, b: number, z0: number,
-             h: number, colour: string, roof: string): void {
-    const p = (du: number, dv: number, z: number) => offset(x, y, w, du, dv, z);
-    // rechte Wand: Farbe, darüber Schatten; linke Wand: Farbe, darüber leichter Schatten; dann das Dach
-    fillPolygon(ctx, [p(a, -b, z0), p(a, b, z0), p(a, b, z0 + h), p(a, -b, z0 + h)], colour);
-    fillPolygon(ctx, [p(a, -b, z0), p(a, b, z0), p(a, b, z0 + h), p(a, -b, z0 + h)], "rgba(0, 0, 0, 0.35)");
-    fillPolygon(ctx, [p(-a, b, z0), p(a, b, z0), p(a, b, z0 + h), p(-a, b, z0 + h)], colour);
-    fillPolygon(ctx, [p(-a, b, z0), p(a, b, z0), p(a, b, z0 + h), p(-a, b, z0 + h)], "rgba(0, 0, 0, 0.15)");
-    fillPolygon(ctx, [p(-a, -b, z0 + h), p(a, -b, z0 + h), p(a, b, z0 + h), p(-a, b, z0 + h)], roof);
 }
 
 function ellipse(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, colour: string): void {
@@ -133,6 +113,92 @@ function drawPlane(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
                       { x: -0.64, y: 0.25 }, { x: -0.58, y: 0.25 }, { x: -0.45, y: 0.05 }], "#2c7fb8");
     fillPolygon(ctx, [{ x: 0.5, y: -0.05 }, { x: 0.6, y: 0 }, { x: 0.5, y: 0.05 }], "#2c7fb8");
     ctx.restore();
+}
+
+/** Hubschrauber in Flugrichtung: Rumpf mit Kanzel vorn, Heckausleger hinten, darüber der Rotor. */
+function drawHelicopter(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, lift: number,
+                        angle: number): void {
+    enterGroundPlane(ctx, x, y, w, lift);
+    ctx.rotate(angle);
+    fillPolygon(ctx, [{ x: -0.08, y: -0.02 }, { x: -0.42, y: -0.015 }, { x: -0.42, y: 0.015 }, { x: -0.08, y: 0.02 }],
+                "#c98a2b");                                                                   // Heckausleger
+    fillPolygon(ctx, [{ x: -0.4, y: 0 }, { x: -0.46, y: -0.08 }, { x: -0.44, y: 0.08 }], "#c98a2b");   // Leitwerk
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 0.16, 0.09, 0, 0, Math.PI * 2);                                         // Rumpf
+    ctx.fillStyle = "#e1a33b";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(0.09, 0, 0.07, 0.06, 0, 0, Math.PI * 2);                                      // Kanzel
+    ctx.fillStyle = "#9fc6e8";
+    ctx.fill();
+    ctx.restore();
+
+    // Rotor etwas höher, dreht sich gleichmäßig
+    enterGroundPlane(ctx, x, y, w, lift + w * 0.06);
+    ctx.rotate((Date.now() / 70) % (Math.PI * 2));
+    ctx.strokeStyle = "rgba(40, 40, 40, 0.85)";
+    ctx.lineWidth = 0.025;
+    ctx.beginPath();
+    ctx.moveTo(-0.32, 0);
+    ctx.lineTo(0.32, 0);
+    ctx.moveTo(0, -0.32);
+    ctx.lineTo(0, 0.32);
+    ctx.stroke();
+    ctx.restore();
+}
+
+/*
+ * Schiff in Fahrtrichtung: Rumpf mit spitzem Bug, Deck, Container in Reihen, hinten die Brücke mit Schornstein.
+ * Die Höhen entstehen durch flache Ebenen übereinander (je etwas nach oben versetzt).
+ */
+function drawShip(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, angle: number): void {
+    const layer = (lift: number, draw: () => void) => {
+        enterGroundPlane(ctx, x, y, w, lift);
+        ctx.rotate(angle);
+        draw();
+        ctx.restore();
+    };
+    const hull = [{ x: 0.55, y: 0 }, { x: 0.38, y: -0.14 }, { x: -0.45, y: -0.14 }, { x: -0.5, y: -0.1 },
+                  { x: -0.5, y: 0.1 }, { x: -0.45, y: 0.14 }, { x: 0.38, y: 0.14 }];
+    // Bugwelle und Kielwasser
+    layer(0, () => {
+        fillPolygon(ctx, [{ x: 0.6, y: 0 }, { x: 0.3, y: -0.22 }, { x: -0.8, y: -0.2 }, { x: -0.8, y: 0.2 },
+                          { x: 0.3, y: 0.22 }], "rgba(255, 255, 255, 0.22)");
+    });
+    // Rumpf in mehreren Ebenen, damit er Höhe bekommt (unten dunkel, oben rot abgesetzt)
+    for (let i = 0; i <= 3; i++) {
+        layer(w * 0.012 * i, () => fillPolygon(ctx, hull, i < 3 ? "#26303a" : "#a8322c"));
+    }
+    layer(w * 0.05, () => {
+        fillPolygon(ctx, hull.map((p) => ({ x: p.x * 0.94, y: p.y * 0.85 })), "#7d8a94");    // Deck
+    });
+    // Container in zwei Lagen
+    const colours = ["#c0392b", "#2c7fb8", "#e1a33b", "#27ae60", "#8e44ad", "#d35400"];
+    let k = 0;
+    for (let row = 0; row < 4; row++) {
+        for (const side of [-0.06, 0.06]) {
+            const cx = 0.25 - row * 0.14;
+            const colour = colours[k++ % colours.length];
+            for (let level = 0; level < 2; level++) {
+                layer(w * (0.06 + level * 0.03), () => {
+                    fillPolygon(ctx, [{ x: cx - 0.06, y: side - 0.05 }, { x: cx + 0.06, y: side - 0.05 },
+                                      { x: cx + 0.06, y: side + 0.05 }, { x: cx - 0.06, y: side + 0.05 }],
+                                level === 0 ? "rgba(0, 0, 0, 0.35)" : colour);
+                });
+            }
+        }
+    }
+    // Brücke hinten und Schornstein
+    for (let i = 0; i < 4; i++) {
+        layer(w * (0.06 + i * 0.025), () => {
+            fillPolygon(ctx, [{ x: -0.42, y: -0.1 }, { x: -0.3, y: -0.1 }, { x: -0.3, y: 0.1 }, { x: -0.42, y: 0.1 }],
+                        i === 3 ? "#f4f4f4" : "#d9dde0");
+        });
+    }
+    layer(w * 0.15, () => {
+        fillPolygon(ctx, [{ x: -0.4, y: -0.03 }, { x: -0.35, y: -0.03 }, { x: -0.35, y: 0.03 }, { x: -0.4, y: 0.03 }],
+                    "#c0392b");
+    });
 }
 
 /** Zug in Richtung der Schiene: zwei Wagen hintereinander, flach gezeichnet mit Dach und Seitenwand. */
@@ -187,10 +253,12 @@ export function drawSprite(ctx: CanvasRenderingContext2D, sprite: SpriteLike, x:
             break;
         }
 
-        case SHIP:
-            box(ctx, x, y, w, 0.42, 0.18, 0, w * 0.06, "#3c4650", "#59636d");
-            box(ctx, x, y, w, 0.12, 0.1, w * 0.06, w * 0.1, "#f2f2f2", "#d0d0d0");
+        case SHIP: {
+            const heading = FLIGHT_HEADING[sprite.frame] || [1, 0];
+            const [du, dv] = rotateDirection(heading[0], heading[1], rotation);
+            drawShip(ctx, x, y, w, Math.atan2(dv, du));
             break;
+        }
 
         case AIRPLANE: {
             const heading = FLIGHT_HEADING[sprite.frame] || [1, 0];
@@ -200,19 +268,10 @@ export function drawSprite(ctx: CanvasRenderingContext2D, sprite: SpriteLike, x:
         }
 
         case HELICOPTER: {
-            const c = { x, y: y - lift };
-            ellipse(ctx, c.x, c.y, w * 0.13, w * 0.09, "#e1a33b");
-            fillPolygon(ctx, [{ x: c.x + w * 0.1, y: c.y - w * 0.02 }, { x: c.x + w * 0.3, y: c.y - w * 0.04 },
-                              { x: c.x + w * 0.1, y: c.y + w * 0.03 }], "#c98a2b");   // Heckausleger
-            ellipse(ctx, c.x - w * 0.05, c.y - w * 0.01, w * 0.05, w * 0.04, "#9fc6e8");
-            // Rotor dreht sich mit dem Animationsbild
-            const angle = (Date.now() / 60) % (Math.PI * 2);   // Rotor dreht sich gleichmäßig
-            ctx.strokeStyle = "#333";
-            ctx.lineWidth = Math.max(1, w / 48);
-            ctx.beginPath();
-            ctx.moveTo(c.x - Math.cos(angle) * w * 0.28, c.y - w * 0.1 - Math.sin(angle) * w * 0.07);
-            ctx.lineTo(c.x + Math.cos(angle) * w * 0.28, c.y - w * 0.1 + Math.sin(angle) * w * 0.07);
-            ctx.stroke();
+            // Der Hubschrauber zeigt in Flugrichtung (Bildnummer wie beim Flugzeug: 1–8 = N … NW)
+            const heading = FLIGHT_HEADING[sprite.frame] || [1, 0];
+            const [du, dv] = rotateDirection(heading[0], heading[1], rotation);
+            drawHelicopter(ctx, x, y, w, lift, Math.atan2(dv, du));
             break;
         }
 

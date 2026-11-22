@@ -56,6 +56,13 @@ var InputStatus = EventEmitter(function(map, tileWidth, waterManager) {
   this._pointerInput = null;
 
   $('.toolButton').click(toolButtonHandler.bind(this));
+
+  // Dorfplaner: Beim Darüberfahren zeigt die Titelzeile Name und Preis, danach wieder das gewählte Werkzeug
+  $('.toolButton').on('mouseenter', function(e) {
+    $(toolOutputID).text($(e.currentTarget).attr('data-label') || 'Werkzeuge');
+  }).on('mouseleave', function() {
+    $(toolOutputID).text($('.toolButton.selected').attr('data-label') || 'Werkzeuge');
+  });
   $('#budgetRequest').click(budgetHandler.bind(this));
   $('#evalRequest').click(evalHandler.bind(this));
   $('#disasterRequest').click(disasterHandler.bind(this));
@@ -144,15 +151,19 @@ var toolButtonHandler = function(e) {
     $(this).addClass('unselected');
   });
 
-  // Add highlight
-  $(e.target).removeClass('unselected');
-  $(e.target).addClass('selected');
+  // Dorfplaner: currentTarget statt target – der Klick kann auf dem Symbol im Knopf landen
+  var button = $(e.currentTarget);
 
-  this.toolName = $(e.target).attr('data-tool');
-  this.toolWidth = $(e.target).attr('data-size');
+  // Add highlight
+  button.removeClass('unselected');
+  button.addClass('selected');
+
+  this.toolName = button.attr('data-tool');
+  this.toolWidth = button.attr('data-size');
   this.currentTool = this.gameTools[this.toolName];
-  this.toolColour = $(e.target).attr('data-colour');
-  $(toolOutputID).html('Werkzeuge');
+  this.toolColour = button.attr('data-colour');
+  // Dorfplaner: Name und Preis des gewählten Werkzeugs in der Titelzeile
+  $(toolOutputID).text(button.attr('data-label') || 'Werkzeuge');
 
   // Dorfplaner: z. B. Untergrundansicht beim Rohrwerkzeug einschalten (game.js)
   if (this.onToolChanged)

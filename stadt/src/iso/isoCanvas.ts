@@ -44,6 +44,9 @@ interface WaterSourceLike {
     kindAt(x: number, y: number): number;
 }
 
+/** Eine Umdrehung des Radars am Flughafen in Millisekunden */
+const RADAR_TURN_MS = 4000;
+
 /** Was IsoCanvas von der Karte braucht (GameMap erfüllt das). */
 interface MapLike {
     readonly width: number;
@@ -368,7 +371,11 @@ export class IsoCanvas {
                 top.y + tileHeight < 0 || top.y - painter.maxHeadroom > this.canvasHeight) {
                 return;
             }
-            painter.drawTile(ctx, top.x, top.y, this.paintRequestFor(vx, vy, map));
+            // Auf ganze Bildschirmpixel runden: Nach Zoom oder Verschieben liegt der Ursprung oft zwischen zwei
+            // Pixeln, dann würde der Browser die Kachelbilder weichzeichnen (unscharfe Grafik).
+            const px = Math.round(top.x * this.pixelRatio) / this.pixelRatio;
+            const py = Math.round(top.y * this.pixelRatio) / this.pixelRatio;
+            painter.drawTile(ctx, px, py, this.paintRequestFor(vx, vy, map));
         });
     }
 
@@ -411,13 +418,15 @@ export class IsoCanvas {
         }
 
         const building = raw.cover === "zone" ? buildingPartOf(value) : null;
+        // Radar am Flughafen: eigene, ruhige Drehung (eine Umdrehung in RADAR_TURN_MS)
+        const radar = building !== null && building.zone === "airport" && building.dx === 2 && building.dy === 0;
         // Gebäude: zur Kachel-Würfelzahl kommt eine für die ganze Zone (von ihrer Ecke aus berechnet)
         const variant = building !== null
             ? this.variantFor(tile.x, tile.y) + 4 * this.zoneVariantFor(tile.x - building.dx, tile.y - building.dy)
             : this.variantFor(tile.x, tile.y);
         return {
             building,
-            frame: animationFrameOf(shown),
+            frame: radar ? Math.floor(Date.now() / (RADAR_TURN_MS / 8)) % 8 : animationFrameOf(shown),
             landSides,
             lightning,
             look,
