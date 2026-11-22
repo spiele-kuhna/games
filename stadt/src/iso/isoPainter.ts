@@ -24,6 +24,8 @@
  * Funktion localToScreen() macht daraus die schräge Form auf dem Bildschirm.
  */
 
+import { BuildingPart } from "./buildingTable";
+import { drawBuildingPart, requiredHeadroom } from "./isoBuildings";
 import { EAST, NORTH, SOUTH, TileLook, WEST, ZoneType } from "./tileKinds";
 
 /** Farben – alle selbst gewählt. */
@@ -53,7 +55,7 @@ const COLOURS = {
     wire: "#2a2a2a",
 };
 
-/** Platzhalter-Farben für Zonen bis Arbeitspaket 3 (dort kommen echte Gebäude). */
+/** Farben leerer Zonen (bebaute Zonen zeichnet isoBuildings.ts). */
 const ZONE_COLOURS: { [zone in ZoneType]: string } = {
     airport: "#a9adb3",
     church: "#d9cfb8",
@@ -82,11 +84,19 @@ export interface PaintRequest {
     readonly landSides: number;
     /** 0–3, damit nicht jede Wiese gleich aussieht. */
     readonly variant: number;
+    /** Gebäudeteil auf dieser Kachel (aus buildingTable.ts) oder null */
+    readonly building: BuildingPart | null;
+}
+
+/** Ein zwischengespeichertes Kachelbild und wie weit es über die Rautenspitze hinausragt. */
+interface CachedImage {
+    canvas: HTMLCanvasElement;
+    headroom: number;
 }
 
 export class IsoTilePainter {
 
-    private cache: { [key: string]: HTMLCanvasElement } = {};
+    private cache: { [key: string]: CachedImage } = {};
 
     /**
      * @param tileWidth Breite einer Raute in CSS-Pixeln
@@ -103,11 +113,16 @@ export class IsoTilePainter {
         return Math.ceil(this.tileWidth * 0.5);
     }
 
+    /** So hoch kann ein Gebäude höchstens über seine Kachel hinausragen (für den sichtbaren Ausschnitt). */
+    get maxHeadroom(): number {
+        return Math.ceil(this.tileWidth * 1.7);
+    }
+
     /** Zeichnet eine Kachel, deren obere Rautenspitze bei (sx, sy) liegt. */
     drawTile(ctx: CanvasRenderingContext2D, sx: number, sy: number, request: PaintRequest): void {
         const image = this.imageFor(request);
-        ctx.drawImage(image, sx - this.tileWidth / 2, sy - this.headroom,
-                      this.tileWidth, this.tileHeight + this.headroom);
+        ctx.drawImage(image.canvas, sx - this.tileWidth / 2, sy - image.headroom,
+                      this.tileWidth, this.tileHeight + image.headroom);
     }
 
     /** Anzahl der zwischengespeicherten Kachelbilder (für Tests und Leistungsmessung). */
@@ -115,10 +130,12 @@ export class IsoTilePainter {
         return Object.keys(this.cache).length;
     }
 
-    private imageFor(request: PaintRequest): HTMLCanvasElement {
+    private imageFor(request: PaintRequest): CachedImage {
         const look = request.look;
+        const b = request.building;
         const key = [look.ground, look.cover, look.zone, look.roads, look.rails, look.wires, look.bridge,
-                     request.landSides, request.variant].join("|");
+                     request.landSides, request.variant,
+                     b ? [b.zone, b.size, b.dx, b.dy, b.level, b.value].join(",") : "-"].join("|");
         let image = this.cache[key];
         if (!image) {
             image = this.renderImage(request);
@@ -127,29 +144,53 @@ export class IsoTilePainter {
         return image;
     }
 
-    private renderImage(request: PaintRequest): HTMLCanvasElement {
+    private renderImage(request: PaintRequest): CachedImage {
+        // Gebäude brauchen mehr Platz nach oben als flache Kacheln
+        const headroom = request.building !== null
+            ? Math.max(this.headroom, requiredHeadroom(request.building, this.tileWidth) + 4)
+            : this.headroom;
         const canvas = document.createElement("canvas");
         canvas.width = Math.ceil(this.tileWidth * this.pixelRatio);
-        canvas.height = Math.ceil((this.tileHeight + this.headroom) * this.pixelRatio);
+        canvas.height = Math.ceil((this.tileHeight + headroom) * this.pixelRatio);
         const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
 
         // Ab hier zeichnen wir in CSS-Pixeln; (0, 0) ist die obere Spitze der Raute.
         ctx.scale(this.pixelRatio, this.pixelRatio);
-        ctx.translate(this.tileWidth / 2, this.headroom);
+        ctx.translate(this.tileWidth / 2, headroom);
 
         const look = request.look;
         this.drawGround(ctx, request);
-        this.drawCover(ctx, look, request.variant);
+        if (look.cover === "zone") {
+            this.drawZone(ctx, look.zone, request.building);
+        } else {
+            this.drawCover(ctx, look, request.variant);
+        }
         if (look.roads !== 0) { this.drawRoads(ctx, look.roads, look.bridge); }
         if (look.rails !== 0) { this.drawRails(ctx, look.rails); }
         if (look.wires !== 0) { this.drawWires(ctx, look.wires); }
-        return canvas;
+        return { canvas, headroom };
+    }
+
+    /*
+     * Zonen: leere Zonen als farbig umrandete Fläche, bebaute als Gebäude mit Höhe (isoBuildings.ts).
+     * Brunnen im Park stehen nicht in der Gebäudetabelle, werden aber genauso gezeichnet.
+     */
+    private drawZone(ctx: CanvasRenderingContext2D, zone: ZoneType | null, building: BuildingPart | null): void {
+        if (zone === "park") {
+            drawBuildingPart(ctx, this, { dx: 0, dy: 0, level: 0, size: 1, value: 0, zone: "park" });
+            return;
+        }
+        if (building === null || building.level < 0) {
+            this.drawZonePlaceholder(ctx, zone);
+            return;
+        }
+        drawBuildingPart(ctx, this, building);
     }
 
     // ---- Grundformen ----------------------------------------------------------------------------------------
 
     /** Kachelkoordinaten (u, v) → Pixel relativ zur oberen Rautenspitze. */
-    private localToScreen(u: number, v: number, lift = 0): ScreenPoint {
+    localToScreen(u: number, v: number, lift = 0): ScreenPoint {
         return {
             x: (u - v) * this.tileWidth / 2,
             y: (u + v) * this.tileHeight / 2 - lift,
@@ -227,7 +268,6 @@ export class IsoTilePainter {
             case "flood": this.fillLocalRect(ctx, 0.05, 0.05, 0.95, 0.95, COLOURS.flood); break;
             case "radioactive": this.drawRadioactive(ctx); break;
             case "fire": this.drawFire(ctx); break;
-            case "zone": this.drawZonePlaceholder(ctx, look.zone); break;
         }
     }
 
@@ -296,7 +336,7 @@ export class IsoTilePainter {
         }
     }
 
-    /** Bis Arbeitspaket 3: Zone als farbige Fläche mit dunklerem Rand. */
+    /** Leere Zone: farbige Fläche mit dunklerem Rand – hier darf gebaut werden, es steht aber noch nichts. */
     private drawZonePlaceholder(ctx: CanvasRenderingContext2D, zone: ZoneType | null): void {
         const colour = zone !== null ? ZONE_COLOURS[zone] : "#999";
         this.fillLocalRect(ctx, 0.04, 0.04, 0.96, 0.96, "rgba(0, 0, 0, 0.25)");

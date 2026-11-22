@@ -25,6 +25,7 @@ import {
     forEachTileBackToFront, GridSize, mapToView, Point, projectToScreen, Rotation, screenToView,
     screenToViewFraction, viewSize, ViewParams, ViewRect, visibleViewRect, viewToMap,
 } from "./projection";
+import { buildingPartOf } from "./buildingTable";
 import { IsoTilePainter, PaintRequest } from "./isoPainter";
 import { describeTile, EAST, NORTH, rotateMask, SOUTH, WEST } from "./tileKinds";
 
@@ -231,7 +232,7 @@ export class IsoCanvas {
         const view = this.viewParams();
         const size = viewSize(map, this.rotation);
         const painter = this.requirePainter();
-        const rect = visibleViewRect(this.canvasWidth, this.canvasHeight, 0, painter.headroom, view, size);
+        const rect = visibleViewRect(this.canvasWidth, this.canvasHeight, 0, painter.maxHeadroom, view, size);
 
         // Hat sich seit dem letzten Bild etwas geändert? Wenn nicht, sparen wir uns das Zeichnen.
         const values = rect === null ? [] : this.collectValues(rect, map);
@@ -266,7 +267,7 @@ export class IsoCanvas {
             const top = projectToScreen(vx, vy, 0, view);
             // Kacheln, die ganz außerhalb liegen, überspringen
             if (top.x + halfWidth < 0 || top.x - halfWidth > this.canvasWidth ||
-                top.y + tileHeight < 0 || top.y - painter.headroom > this.canvasHeight) {
+                top.y + tileHeight < 0 || top.y - painter.maxHeadroom > this.canvasHeight) {
                 return;
             }
             painter.drawTile(ctx, top.x, top.y, this.paintRequestFor(vx, vy, map));
@@ -276,7 +277,8 @@ export class IsoCanvas {
     /** Alles, was der Zeichner für eine Ansichtskachel wissen muss. */
     private paintRequestFor(vx: number, vy: number, map: MapLike): PaintRequest {
         const tile = viewToMap(vx, vy, map, this.rotation);
-        const raw = describeTile(map.getTileValue(tile.x, tile.y));
+        const value = map.getTileValue(tile.x, tile.y);
+        const raw = describeTile(value);
 
         // Anschlüsse aus Karten- in Ansichtsrichtungen drehen
         const look = {
@@ -306,7 +308,8 @@ export class IsoCanvas {
             }
         }
 
-        return { landSides, look, variant: this.variantFor(tile.x, tile.y) };
+        const building = raw.cover === "zone" ? buildingPartOf(value) : null;
+        return { building, landSides, look, variant: this.variantFor(tile.x, tile.y) };
     }
 
     /** Feste „Zufallszahl“ 0–3 je Kartenkachel, damit Wiesen und Wasser lebendiger aussehen – auch nach Drehen. */
