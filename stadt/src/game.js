@@ -24,7 +24,7 @@ import { GameCanvas } from './gameCanvas.js';
 import { GameMap } from './gameMap.js';
 import { InfoBar } from './infoBar.js';
 import { InputStatus } from './inputStatus.js';
-import { IsoCanvas, ZOOM_LEVELS } from './iso/isoCanvas.ts';
+import { IsoCanvas } from './iso/isoCanvas.ts';
 import { ViewSwitcher } from './iso/viewSwitcher.js';
 import * as Messages from './messages.ts';
 import { MonsterTV } from './monsterTV.js';
@@ -81,6 +81,8 @@ function Game(gameMap, tileSet, snowTileSet, spriteSheet, difficulty, name) {
   this.gameCanvas.setMode(ViewSwitcher.loadPreference());
   this.setupViewControls();
   this.inputStatus = new InputStatus(this.gameMap, tileSet.tileWidth);
+  // Dorfplaner: Maus und Finger auf der Karte wirken auf die gerade aktive Ansicht
+  this.inputStatus.setView(this.gameCanvas);
 
   this.dialogOpen = false;
   this._openWindow = null;
@@ -230,9 +232,7 @@ function Game(gameMap, tileSet, snowTileSet, spriteSheet, difficulty, name) {
   this.congratsWindow = new CongratsWindow(opacityLayerID, 'congratsWindow');
   this.congratsWindow.addEventListener(Messages.CONGRATS_WINDOW_CLOSED, this.genericDialogClosure);
 
-  // Listen for touches, so we can warn tablet users
-  this.touchListener = touchListener.bind(this);
-  window.addEventListener('touchstart', this.touchListener, false);
+  // Dorfplaner: Die Warnung für Touch-Geräte entfällt – Finger werden jetzt unterstützt (ui/pointerInput.ts).
 
   // Unhide controls
   this.revealControls();
@@ -264,8 +264,25 @@ function Game(gameMap, tileSet, snowTileSet, spriteSheet, difficulty, name) {
 // Dorfplaner: Knopf und Taste V schalten zwischen Draufsicht und Isometrie um.
 Game.prototype.setupViewControls = function() {
   var updateLabel = function() {
-    $('#viewRequest').text(this.gameCanvas.isIsometric() ? 'Draufsicht' : '3D-Ansicht');
+    var iso = this.gameCanvas.isIsometric();
+    $('#viewRequest').text(iso ? 'Draufsicht' : '3D-Ansicht');
+    // Drehen und Zoomen gibt es nur in der 3D-Ansicht
+    $('#viewControls').css('display', iso ? 'flex' : 'none');
   }.bind(this);
+
+  // Zoomen per Knopf oder Taste: um die Bildschirmmitte
+  var zoom = function(step) {
+    this.gameCanvas.zoomAt(step, this.gameCanvas.canvasWidth / 2, this.gameCanvas.canvasHeight / 2);
+  }.bind(this);
+
+  var rotate = function(direction) {
+    this.gameCanvas.getIsoCanvas().rotate(direction);
+  }.bind(this);
+
+  $('#rotateLeft').click(function(e) { e.preventDefault(); rotate(-1); });
+  $('#rotateRight').click(function(e) { e.preventDefault(); rotate(1); });
+  $('#zoomIn').click(function(e) { e.preventDefault(); zoom(1); });
+  $('#zoomOut').click(function(e) { e.preventDefault(); zoom(-1); });
 
   $('#viewRequest').click(function(e) {
     e.preventDefault();
@@ -285,17 +302,15 @@ Game.prototype.setupViewControls = function() {
       return;
     }
 
-    // Drehen (Q/E) und Zoom (+/−) nur in der isometrischen Ansicht. Knöpfe und Gesten folgen in Arbeitspaket 5.
+    // Drehen (Q/E) und Zoom (+/−) nur in der 3D-Ansicht
     if (!this.gameCanvas.isIsometric())
       return;
 
-    var iso = this.gameCanvas.getIsoCanvas();
-    var zoomIndex = ZOOM_LEVELS.indexOf(iso.zoom);
     switch (e.key) {
-      case 'q': case 'Q': iso.rotate(-1); break;
-      case 'e': case 'E': iso.rotate(1); break;
-      case '+': case '=': iso.setZoom(ZOOM_LEVELS[Math.min(zoomIndex + 1, ZOOM_LEVELS.length - 1)]); break;
-      case '-': iso.setZoom(ZOOM_LEVELS[Math.max(zoomIndex - 1, 0)]); break;
+      case 'q': case 'Q': rotate(-1); break;
+      case 'e': case 'E': rotate(1); break;
+      case '+': case '=': zoom(1); break;
+      case '-': zoom(-1); break;
       default: return;
     }
     e.preventDefault();

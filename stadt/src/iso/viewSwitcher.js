@@ -100,6 +100,34 @@ ViewSwitcher.prototype.getIsoCanvas = function() {
 });
 
 
+/*
+ * Karte um (dx, dy) Pixel verschieben (Ziehen mit Maus oder Finger). Die 3D-Ansicht kann das pixelgenau;
+ * die Draufsicht rückt nur in ganzen Kacheln (16 Pixel) – deshalb sammeln wir dort die Pixel, bis eine
+ * Kachel voll ist.
+ */
+ViewSwitcher.prototype.scrollBy = function(dx, dy) {
+  if (this._active === this._iso) {
+    this._iso.scrollBy(dx, dy);
+    return;
+  }
+
+  this._restX = (this._restX || 0) + dx;
+  this._restY = (this._restY || 0) + dy;
+  var tile = 16;
+  while (this._restX >= tile) { this._top.moveWest(); this._restX -= tile; }
+  while (this._restX <= -tile) { this._top.moveEast(); this._restX += tile; }
+  while (this._restY >= tile) { this._top.moveNorth(); this._restY -= tile; }
+  while (this._restY <= -tile) { this._top.moveSouth(); this._restY += tile; }
+};
+
+
+// Zoomen gibt es nur in der 3D-Ansicht (die Draufsicht hat eine feste Kachelgröße)
+ViewSwitcher.prototype.zoomAt = function(step, x, y) {
+  if (this._active === this._iso)
+    this._iso.zoomAt(step, x, y);
+};
+
+
 // Winterkacheln betreffen nur die Draufsicht
 ViewSwitcher.prototype.changeTileSet = function(tileSet) {
   this._top.changeTileSet(tileSet);

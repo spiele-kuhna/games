@@ -29,6 +29,7 @@ import {
 import { buildingPartOf } from "./buildingTable";
 import { IsoTilePainter, PaintRequest } from "./isoPainter";
 import { drawSprite, SpriteLike, spriteCentre } from "./isoSprites";
+import { nextZoomLevel, zoomOrigin } from "../ui/gestures";
 import {
     animationFrameOf, describeTile, EAST, isSmoke, LIGHTNING_BOLT, NORTH, rotateMask, SOUTH, trafficOf, WEST,
 } from "./tileKinds";
@@ -63,7 +64,7 @@ interface MouseBox {
 }
 
 /** Erlaubte Zoomstufen: Breite einer Raute in Pixeln. */
-export const ZOOM_LEVELS = [32, 64, 128];
+export const ZOOM_LEVELS = [32, 48, 64, 96, 128];
 
 const BACKGROUND = "#1e2a24";
 
@@ -136,6 +137,23 @@ export class IsoCanvas {
         this.tileWidth = tileWidth;
         this.painter = null;
         this.centreOnView(centre.x, centre.y);
+    }
+
+    /**
+     * Eine Zoomstufe näher (+1) oder weiter weg (−1); der Kartenpunkt unter (x, y) bleibt dabei an seiner
+     * Stelle – so zoomt man „auf den Mauszeiger zu“ bzw. zwischen die Finger.
+     */
+    zoomAt(step: number, x: number, y: number): void {
+        const newWidth = nextZoomLevel(ZOOM_LEVELS, this.tileWidth, step);
+        if (newWidth === this.tileWidth) {
+            return;
+        }
+        const origin = zoomOrigin(this.originX, this.originY, x, y, this.tileWidth, newWidth);
+        this.tileWidth = newWidth;
+        this.painter = null;
+        this.originX = origin.x;
+        this.originY = origin.y;
+        this.keepMapInView();
     }
 
     get currentRotation(): Rotation {

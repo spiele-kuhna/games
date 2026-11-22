@@ -1033,3 +1033,34 @@ main {
 #splashLoad:disabled {
   cursor: not-allowed;
 }
+
+/* Dorfplaner: runde Knöpfe zum Drehen und Zoomen der 3D-Ansicht, groß genug für Finger */
+#viewControls {
+  position: absolute;
+  right: 12px;
+  bottom: 52px;
+  display: flex;
+  gap: 6px;
+}
+
+#viewControls button {
+  width: 44px;
+  height: 44px;
+  border-radius: 22px;
+  border: none;
+  background-color: rgba(47, 79, 79, 0.88);
+  color: white;
+  font-size: 22px;
+  line-height: 44px;
+  padding: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+#viewControls button:active {
+  background-color: rgba(47, 79, 79, 1);
+}
+
+/* Dorfplaner: Doppeltippen auf Knöpfe soll in Safari nicht die Seite zoomen */
+button, input[type="submit"] {
+  touch-action: manipulation;
+}

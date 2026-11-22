@@ -18,6 +18,7 @@ import { GameCanvas } from './gameCanvas.js';
 import { GameTools } from './gameTools.js';
 import * as Messages from './messages.ts';
 import { MiscUtils } from './miscUtils.js';
+import { PointerInput } from './ui/pointerInput.ts';
 
 var InputStatus = EventEmitter(function(map, tileWidth) {
   this.gameTools = new GameTools(map);
@@ -39,11 +40,6 @@ var InputStatus = EventEmitter(function(map, tileWidth) {
   this.mouseX = -1;
   this.mouseY = -1;
 
-  // Mouse drags
-  this._dragging = false;
-  this._lastdragX = -1;
-  this._lastdragY = -1;
-
   // Tool buttons
   this.toolName = null;
   this.currentTool = null;
@@ -54,14 +50,10 @@ var InputStatus = EventEmitter(function(map, tileWidth) {
   $(document).keydown(keyDownHandler.bind(this));
   $(document).keyup(keyUpHandler.bind(this));
 
-  this.getRelativeCoordinates = getRelativeCoordinates.bind(this);
-  $(this.canvasID).on('mouseenter', mouseEnterHandler.bind(this));
-  $(this.canvasID).on('mouseleave', mouseLeaveHandler.bind(this));
-
-  this.mouseDownHandler = mouseDownHandler.bind(this);
-  this.mouseMoveHandler = mouseMoveHandler.bind(this);
-  this.mouseUpHandler = mouseUpHandler.bind(this);
-  this.canvasClickHandler = canvasClickHandler.bind(this);
+  // Dorfplaner: Maus, Stift und Finger auf der Karte verarbeitet PointerInput (ui/pointerInput.ts).
+  // Es wird in setView() angelegt, weil es die Ansicht (Draufsicht oder 3D) zum Umrechnen braucht.
+  this._view = null;
+  this._pointerInput = null;
 
   $('.toolButton').click(toolButtonHandler.bind(this));
   $('#budgetRequest').click(budgetHandler.bind(this));
@@ -145,104 +137,6 @@ var keyUpHandler = function(e) {
 };
 
 
-var getRelativeCoordinates = function(e) {
-  var cRect = document.querySelector(this.canvasID).getBoundingClientRect();
-  return {x: e.clientX - cRect.left, y: e.clientY - cRect.top};
-};
-
-
-var mouseEnterHandler = function(e) {
-  if (this.currentTool === null)
-    return;
-
-  $(this.canvasID).on('mousemove', this.mouseMoveHandler);
-
-  if (this.currentTool.isDraggable)
-    $(this.canvasID).on('mousedown', this.mouseDownHandler);
-  else
-    $(this.canvasID).on('click', this.canvasClickHandler);
-};
-
-
-var mouseDownHandler = function(e) {
-  if (e.which !== 1 || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey)
-    return;
-
-  var coords = this.getRelativeCoordinates(e);
-  this.mouseX = coords.x;
-  this.mouseY = coords.y;
-
-  this._dragging = true;
-  this._emitEvent(Messages.TOOL_CLICKED, {x: this.mouseX, y: this.mouseY});
-
-  this._lastDragX = Math.floor(this.mouseX / this._tileWidth);
-  this._lastDragY = Math.floor(this.mouseY / this._tileWidth);
-
-  $(this.canvasID).on('mouseup', this.mouseUpHandler);
-  e.preventDefault();
-};
-
-
-var mouseUpHandler = function(e) {
-  this._dragging = false;
-  this._lastDragX = -1;
-  this._lastDragY = -1;
-  $(this.canvasID).off('mouseup');
-  e.preventDefault();
-};
-
-
-var mouseLeaveHandler = function(e) {
-  $(this.canvasID).off('mousedown');
-  $(this.canvasID).off('mousemove');
-  $(this.canvasID).off('mouseup');
-
-  // Watch out: we might have been mid-drag
-  if (this._dragging) {
-    this._dragging = false;
-    this._lastDragX = -1;
-    this._lastDragY = -1;
-  }
-
-  $(this.canvasID).off('click');
-
-  this.mouseX = -1;
-  this.mouseY = -1;
-};
-
-
-var mouseMoveHandler = function(e) {
-  var coords = this.getRelativeCoordinates(e);
-  this.mouseX = coords.x;
-  this.mouseY = coords.y;
-
-  if (this._dragging) {
-    // XXX Work up how to patch up the path for fast mouse moves. My first attempt was too slow, and ended up missing
-    // mouseUp events
-    var x = Math.floor(this.mouseX / this._tileWidth);
-    var y = Math.floor(this.mouseY / this._tileWidth);
-
-    var lastX = this._lastDragX;
-    var lastY = this._lastDragY;
-    if (x !== lastX || y !== lastY) {
-      this._emitEvent(Messages.TOOL_CLICKED, {x: this.mouseX, y: this.mouseY});
-      this._lastDragX = x;
-      this._lastDragY = y;
-    }
-  }
-};
-
-
-var canvasClickHandler = function(e) {
-  if (e.which !== 1 || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey || this.mouseX === -1 ||
-     this._mouseY === -1 || this._dragging)
-    return;
-
-  this._emitEvent(Messages.TOOL_CLICKED, {x: this.mouseX, y: this.mouseY});
-  e.preventDefault();
-};
-
-
 var toolButtonHandler = function(e) {
   // Remove highlight from last tool button
   $('.selected').each(function() {
@@ -269,6 +163,52 @@ var toolButtonHandler = function(e) {
   }
 
   e.preventDefault();
+};
+
+
+/*
+ * Dorfplaner: Verbindet die Eingabe auf der Karte mit der Ansicht (ViewSwitcher aus iso/viewSwitcher.js).
+ * PointerInput entscheidet, ob gebaut, verschoben, gezoomt oder abgefragt wird; hier wird es ausgeführt.
+ */
+InputStatus.prototype.setView = function(view) {
+  this._view = view;
+  var self = this;
+  var canvas = document.querySelector(this.canvasID);
+
+  this._pointerInput = new PointerInput(canvas, {
+    hasTool: function() {
+      return self.currentTool !== null;
+    },
+    toolIsDraggable: function() {
+      return self.currentTool !== null && self.currentTool.isDraggable;
+    },
+    hover: function(x, y) {
+      self.mouseX = x === null ? -1 : x;
+      self.mouseY = y === null ? -1 : y;
+    },
+    useToolAt: function(x, y) {
+      self.mouseX = x;
+      self.mouseY = y;
+      self._emitEvent(Messages.TOOL_CLICKED, {x: x, y: y});
+    },
+    tileKeyAt: function(x, y) {
+      var tile = self._view.canvasCoordinateToTileCoordinate(x, y);
+      return tile === null ? null : tile.x + ',' + tile.y;
+    },
+    queryAt: function(x, y) {
+      // Langes Drücken: kurz das Abfrage-Werkzeug benutzen, danach wieder das gewählte Werkzeug
+      var tool = self.currentTool;
+      self.currentTool = self.gameTools.query;
+      self._emitEvent(Messages.TOOL_CLICKED, {x: x, y: y});
+      self.currentTool = tool;
+    },
+    panBy: function(dx, dy) {
+      self._view.scrollBy(dx, dy);
+    },
+    zoomAt: function(step, x, y) {
+      self._view.zoomAt(step, x, y);
+    }
+  });
 };
 
 
