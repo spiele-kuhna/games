@@ -100,19 +100,22 @@ Traffic.prototype.findPerimeterRoad = function(pos) {
 
 var MAX_TRAFFIC_DISTANCE = 30;
 
+// Dorfplaner, 2026: Fehlerbehebung. Position (position.ts) erwartet (x, y); hier wurde ein ganzes Objekt
+// übergeben bzw. die nicht vorhandene Variable „pos“ benutzt. Dadurch scheiterte jede Fahrt, und es entstand nie
+// Verkehr. Siehe docs/ANALYSE_FUNKTIONEN_VORBILD.md, Abschnitt 2.
 Traffic.prototype.tryDrive = function(startPos, destFn) {
   var dirLast;
-  var drivePos = new Position(startPos);
+  var drivePos = new Position(startPos.x, startPos.y);
 
   /* Maximum distance to try */
   for (var dist = 0; dist < MAX_TRAFFIC_DISTANCE; dist++) {
     var  dir = this.tryGo(drivePos, dirLast);
     if (dir) {
-      drivePos = Position.move(pos, dir);
+      drivePos = Position.move(drivePos, dir);
       dirLast = dir.oppositeDirection();
 
       if (dist & 1)
-        this._stack.push(new Position(drivePos));
+        this._stack.push(new Position(drivePos.x, drivePos.y));
 
       if (this.driveDone(drivePos, destFn))
         return true;
