@@ -54,6 +54,17 @@ interface SpriteSource {
     getSpriteList(): SpriteLike[];
 }
 
+/** Verkehrsdichte der Simulation (BlockMap trafficDensityMap, Werte 0–240), wird nur gelesen. */
+interface TrafficSource {
+    worldGet(x: number, y: number): number;
+}
+
+/*
+ * Ab dieser Verkehrsdichte zeigt die 3D-Ansicht Autos. Die Simulation selbst markiert eine Straße erst ab 64
+ * als „mit Verkehr“ (road.js); so früh sieht man in einer jungen Stadt sonst kaum ein Auto.
+ */
+const LIGHT_TRAFFIC_FROM = 12;
+
 /** Bau-Vorschau, wie sie Game.calculateMouseForPaint() liefert. */
 interface MouseBox {
     x: number;
@@ -95,6 +106,9 @@ export class IsoCanvas {
     // Animationen: eigener AnimationManager wie in GameCanvas; animierte Werte des Karten-Rechtecks
     private animation: AnimationLike | null = null;
     private sprites: SpriteSource | null = null;
+    private trafficSource: TrafficSource | null = null;
+    /** Takt für Autos auf Straßen mit wenig Verkehr (viermal pro Sekunde ein Schritt) */
+    private trafficTick = 0;
     private animated: number[] = [];
     private animatedX = 0;
     private animatedY = 0;
@@ -104,9 +118,10 @@ export class IsoCanvas {
         window.addEventListener("resize", () => { this.dimensionsChanged = true; }, false);
     }
 
-    init(map: MapLike, sprites?: SpriteSource): void {
+    init(map: MapLike, sprites?: SpriteSource, traffic?: TrafficSource): void {
         this.map = map;
         this.sprites = sprites || null;
+        this.trafficSource = traffic || null;
         // AnimationManager ist eine JavaScript-Konstruktorfunktion; TypeScript kennt ihren Typ nicht genau.
         this.animation = new (AnimationManager as any)(map) as AnimationLike;
         this.ready = true;
@@ -285,7 +300,8 @@ export class IsoCanvas {
         // Kachelwerte mit Animationen (Verkehr, Rauch, Blinken …) – sie ändern sich etwa alle 50 ms
         const values = rect === null ? [] : this.animateRect(rect, map, isPaused === true);
         const sprites = this.activeSprites();
-        const signature = [this.canvasWidth, this.canvasHeight, this.tileWidth, this.rotation, this.originX,
+        this.trafficTick = isPaused === true ? this.trafficTick : Math.floor(Date.now() / 250);
+        const signature = [this.trafficTick, this.canvasWidth, this.canvasHeight, this.tileWidth, this.rotation, this.originX,
                            this.originY, mouse ? [mouse.x, mouse.y, mouse.width, mouse.colour].join(",") : "-",
                            rect ? [rect.minX, rect.maxX, rect.minY, rect.maxY].join(",") : "-",
                            sprites.map((s) => [s.type, s.frame, s.x, s.y].join(",")).join(";")].join("|");
@@ -371,9 +387,19 @@ export class IsoCanvas {
             lightning,
             look,
             smoke: isSmoke(shown),
-            traffic: trafficOf(shown),
+            traffic: this.trafficFor(shown, raw.roads !== 0, tile.x, tile.y),
             variant: this.variantFor(tile.x, tile.y),
         };
+    }
+
+    /** Verkehr: von der Simulation markiert, sonst aus der Verkehrsdichte (nur Anzeige). */
+    private trafficFor(value: number, isRoad: boolean, x: number, y: number) {
+        const marked = trafficOf(value);
+        if (marked.level > 0 || !isRoad || this.trafficSource === null) {
+            return marked;
+        }
+        const density = this.trafficSource.worldGet(x, y);
+        return density >= LIGHT_TRAFFIC_FROM ? { frame: this.trafficTick % 4, level: 1 } : marked;
     }
 
     /*

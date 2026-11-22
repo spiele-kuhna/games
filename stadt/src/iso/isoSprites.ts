@@ -112,25 +112,31 @@ export function drawSprite(ctx: CanvasRenderingContext2D, sprite: SpriteLike, x:
             break;
 
         case AIRPLANE: {
+            // groß genug, dass man es auch bei kleiner Zoomstufe sieht
             const c = { x, y: y - lift };
-            ellipse(ctx, c.x, c.y, w * 0.2, w * 0.05, "#f4f4f4");
-            fillPolygon(ctx, [{ x: c.x - w * 0.04, y: c.y - w * 0.16 }, { x: c.x + w * 0.05, y: c.y },
-                              { x: c.x - w * 0.04, y: c.y + w * 0.16 }], "#d8d8d8");
-            ellipse(ctx, c.x + w * 0.16, c.y, w * 0.04, w * 0.03, "#2c7fb8");
+            const s = w * 1.7;
+            ellipse(ctx, c.x, c.y, s * 0.22, s * 0.055, "#f7f7f7");
+            fillPolygon(ctx, [{ x: c.x - s * 0.03, y: c.y - s * 0.2 }, { x: c.x + s * 0.07, y: c.y },
+                              { x: c.x - s * 0.03, y: c.y + s * 0.2 }, { x: c.x - s * 0.08, y: c.y }], "#dedede");
+            fillPolygon(ctx, [{ x: c.x - s * 0.19, y: c.y }, { x: c.x - s * 0.23, y: c.y - s * 0.09 },
+                              { x: c.x - s * 0.15, y: c.y }], "#2c7fb8");
+            ellipse(ctx, c.x + s * 0.17, c.y, s * 0.035, s * 0.025, "#2c7fb8");
             break;
         }
 
         case HELICOPTER: {
             const c = { x, y: y - lift };
-            ellipse(ctx, c.x, c.y, w * 0.1, w * 0.07, "#e1a33b");
-            ellipse(ctx, c.x - w * 0.03, c.y - w * 0.01, w * 0.04, w * 0.03, "#9fc6e8");
+            ellipse(ctx, c.x, c.y, w * 0.13, w * 0.09, "#e1a33b");
+            fillPolygon(ctx, [{ x: c.x + w * 0.1, y: c.y - w * 0.02 }, { x: c.x + w * 0.3, y: c.y - w * 0.04 },
+                              { x: c.x + w * 0.1, y: c.y + w * 0.03 }], "#c98a2b");   // Heckausleger
+            ellipse(ctx, c.x - w * 0.05, c.y - w * 0.01, w * 0.05, w * 0.04, "#9fc6e8");
             // Rotor dreht sich mit dem Animationsbild
             const angle = sprite.frame * Math.PI / 4;
             ctx.strokeStyle = "#333";
             ctx.lineWidth = Math.max(1, w / 48);
             ctx.beginPath();
-            ctx.moveTo(c.x - Math.cos(angle) * w * 0.18, c.y - w * 0.08 - Math.sin(angle) * w * 0.05);
-            ctx.lineTo(c.x + Math.cos(angle) * w * 0.18, c.y - w * 0.08 + Math.sin(angle) * w * 0.05);
+            ctx.moveTo(c.x - Math.cos(angle) * w * 0.28, c.y - w * 0.1 - Math.sin(angle) * w * 0.07);
+            ctx.lineTo(c.x + Math.cos(angle) * w * 0.28, c.y - w * 0.1 + Math.sin(angle) * w * 0.07);
             ctx.stroke();
             break;
         }

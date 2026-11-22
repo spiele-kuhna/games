@@ -53,14 +53,24 @@ interface Tank { kind: "tank"; u: number; v: number; radius: number; height: num
 interface Tree { kind: "tree"; u: number; v: number; size: number; conifer: boolean; }
 interface Chimney { kind: "chimney"; u: number; v: number; height: number; }
 interface Pile { kind: "pile"; u: number; v: number; colour: string; }
+/** Kühlturm: unten breit, in der Mitte eingeschnürt, oben wieder etwas breiter */
+interface CoolingTower { kind: "coolingTower"; u: number; v: number; radius: number; height: number; }
+/** Reaktorgebäude: Zylinder mit Kuppel */
+interface Dome { kind: "dome"; u: number; v: number; radius: number; height: number; colour: string; }
+/** Fahrzeug, das irgendwo parkt: Löschfahrzeug, Streifenwagen, Flugzeug */
+interface Vehicle { kind: "vehicle"; u: number; v: number; type: "fireTruck" | "policeCar" | "plane"; }
+/** Schild auf dem Dach (kurzer Text, z. B. „FW“) – hilft beim Erkennen öffentlicher Gebäude */
+interface Sign { kind: "sign"; u: number; v: number; z: number; text: string; colour: string; background: string; }
+/** Kontrollturm des Flughafens: schmaler Schaft mit verglaster Kanzel */
+interface ControlTower { kind: "controlTower"; u: number; v: number; height: number; }
 
-type Item = Box | Tank | Tree | Chimney | Pile;
+type Item = Box | Tank | Tree | Chimney | Pile | CoolingTower | Dome | Vehicle | Sign | ControlTower;
 
 /** Alles, was auf einer Gebäudekachel gezeichnet wird. */
 interface TileDesign {
     lot: string;
     /** zusätzliche Bodenmarkierung */
-    ground: "none" | "parking" | "field" | "runway" | "garden";
+    ground: "none" | "parking" | "field" | "runway" | "garden" | "apron" | "yard";
     items: Item[];
     extra: "none" | "cross" | "crane" | "radar" | "fountain" | "containers";
     /** Höhe in Rautenbreiten, aus der Rauch aufsteigt (−1 = vom höchsten Dach) */
@@ -203,6 +213,101 @@ function industrial(part: BuildingPart, seed: number): TileDesign {
     return { extra: "none", ground: "none", items, lot: LOT_PAVED, smokeFrom: chimney ? 1.0 : -1 };
 }
 
+/*
+ * Feuerwache (3 × 3): hinten das Wachgebäude mit Schlauchturm, in der Mitte die Fahrzeughalle mit Toren,
+ * vorn der Hof mit Löschfahrzeugen. Auf dem Dach das Kürzel „FW“.
+ */
+function fireStation(part: BuildingPart, none: TileDesign): TileDesign {
+    const red = "#c63c32";
+    const roof = "#6e2a24";
+    if (part.dy === 0) {
+        if (part.dx === 2) {
+            return { ...none, items: [box(0.28, 0.28, 0.72, 0.72, 0.78, red, "#efefef", "flat", "none"),
+                                      box(0.06, 0.06, 0.28, 0.94, 0.3, red, roof, "parapet", "office")] };
+        }
+        return { ...none, items: [box(0.06, 0.06, 0.94, 0.94, 0.32, red, roof, "parapet", "office")] };
+    }
+    if (part.dy === 1) {
+        const items: Item[] = [box(0.06, 0.06, 0.94, 0.94, 0.24, red, roof, "parapet", "garage")];
+        if (part.dx === 1) {
+            items.push({ background: "#ffffff", colour: red, kind: "sign", text: "FW", u: 0.5, v: 0.5, z: 0.24 });
+        }
+        return { ...none, items };
+    }
+    // Hof mit Fahrzeugen
+    return { ...none, ground: "yard",
+             items: part.dx < 2 ? [{ kind: "vehicle", type: "fireTruck", u: 0.5, v: 0.45 }]
+                                : [{ conifer: false, kind: "tree", size: 0.8, u: 0.6, v: 0.6 }] };
+}
+
+/*
+ * Polizeiwache (3 × 3): Bürogebäude in Blau-Weiß, in der Mitte mit „POLIZEI“-Schild und Funkmast,
+ * vorn Parkplatz mit Streifenwagen.
+ */
+function policeStation(part: BuildingPart, none: TileDesign): TileDesign {
+    const wall = "#e9edf3";
+    const roof = "#2e4a86";
+    if (part.dy <= 1) {
+        const centre = part.dx === 1 && part.dy === 1;
+        const items: Item[] = [box(0.06, 0.06, 0.94, 0.94, part.dy === 0 ? 0.34 : 0.26, wall, roof, "parapet", "office",
+                                   { rooftop: part.dx === 2 && part.dy === 0 ? "antenna" : "none" })];
+        if (centre) {
+            items.push({ background: "#2e5aa8", colour: "#ffffff", kind: "sign", text: "POLIZEI", u: 0.5, v: 0.5,
+                         z: 0.26 });
+        }
+        return { ...none, items };
+    }
+    return { ...none, ground: "parking",
+             items: part.dx === 1 ? [{ conifer: true, kind: "tree", size: 0.8, u: 0.5, v: 0.5 }]
+                                  : [{ kind: "vehicle", type: "policeCar", u: 0.45, v: 0.5 }] };
+}
+
+/*
+ * Kernkraftwerk (4 × 4): zwei Kühltürme, ein Reaktorgebäude mit Kuppel, eine Turbinenhalle,
+ * ringsum flache Nebengebäude.
+ */
+function nuclearPlant(part: BuildingPart, none: TileDesign): TileDesign {
+    const { dx, dy } = part;
+    if ((dx === 2 || dx === 3) && dy <= 1) {
+        return { ...none, items: [{ height: 1.0, kind: "coolingTower", radius: 0.46, u: 0.5, v: 0.5 }], smokeFrom: 1.0 };
+    }
+    if (dx === 1 && dy === 1) {
+        return { ...none, items: [{ colour: "#d8dcd4", height: 0.42, kind: "dome", radius: 0.42, u: 0.5, v: 0.5 }] };
+    }
+    if (dy === 2 && dx >= 1) {
+        return { ...none, items: [box(0.04, 0.04, 0.96, 0.96, 0.3, "#c9d0c6", "#8b968a", "sawtooth", "garage")] };
+    }
+    return { ...none, items: [box(0.1, 0.1, 0.9, 0.9, 0.16, "#d7dcd3", "#9aa596", "parapet", "office")] };
+}
+
+/*
+ * Flughafen (6 × 6): Terminal mit Glasfront, Kontrollturm, Radar, Hangars, Vorfeld mit geparkten
+ * Flugzeugen und eine Start- und Landebahn über die ganze Breite.
+ */
+function airport(part: BuildingPart, none: TileDesign): TileDesign {
+    const { dx, dy } = part;
+    const lot = "#9c9c98";
+    if (dy >= 4) {
+        return { ...none, ground: "runway", lot: "#7c8a5c" };
+    }
+    if (dx === 2 && dy === 0) {
+        return { ...none, extra: "radar", lot };
+    }
+    if (dx === 2 && dy === 1) {
+        return { ...none, items: [{ height: 0.9, kind: "controlTower", u: 0.5, v: 0.5 }], lot };
+    }
+    if (dx <= 1 && dy <= 1) {
+        return { ...none, lot, items: [box(0.04, 0.04, 0.96, 0.96, 0.24, "#c3d2e2", "#8a96a3", "parapet", "glass",
+                                           { rooftop: "unit" })] };
+    }
+    if (dx >= 4 && dy <= 1) {
+        return { ...none, lot, items: [box(0.05, 0.05, 0.95, 0.95, 0.3, "#b0b5ba", "#8d9297", "gableU", "garage")] };
+    }
+    // Vorfeld
+    return { ...none, ground: "apron", lot: "#a4a4a0",
+             items: (dx + dy) % 2 === 0 ? [{ kind: "vehicle", type: "plane", u: 0.5, v: 0.5 }] : [] };
+}
+
 /** Gestaltung einer Gebäudekachel. Leere Zonen (level −1) haben kein Gebäude. */
 function designFor(part: BuildingPart, variant: number): TileDesign {
     const seed = seedOf(part, variant);
@@ -227,9 +332,9 @@ function designFor(part: BuildingPart, variant: number): TileDesign {
                     items: [box(0.08, 0.08, 0.92, 0.92, 0.3, "#e9dfcb", "#7a4a3a",
                                 part.dx === 1 ? "gableV" : "gableU", "none")] };
         case "fireStation":
-            return { ...none, items: [box(0.06, 0.06, 0.94, 0.94, 0.27, "#c9483f", "#7a2a24", "parapet", "garage")] };
+            return fireStation(part, none);
         case "police":
-            return { ...none, items: [box(0.06, 0.06, 0.94, 0.94, 0.27, "#4a68b0", "#25386a", "parapet", "office")] };
+            return policeStation(part, none);
         case "coal": {
             if (part.dx >= 2 && part.dy <= 1) {
                 return { ...none, items: [{ height: 1.0, kind: "chimney", u: 0.5, v: 0.5 }], smokeFrom: 1.0 };
@@ -239,29 +344,15 @@ function designFor(part: BuildingPart, variant: number): TileDesign {
             }
             return { ...none, items: [box(0.04, 0.04, 0.96, 0.96, 0.38, "#7d7d7b", "#4f4f4e", "sawtooth", "garage")] };
         }
-        case "nuclear": {
-            if (part.dx >= 1 && part.dx <= 2 && part.dy >= 1 && part.dy <= 2) {
-                return { ...none, items: [{ colour: "#d9ded6", height: 0.6, kind: "tank", radius: 0.4, u: 0.5, v: 0.5 }] };
-            }
-            return { ...none, items: [box(0.06, 0.06, 0.94, 0.94, 0.2, "#d7dcd3", "#9aa596", "parapet", "none")] };
-        }
+        case "nuclear":
+            return nuclearPlant(part, none);
         case "port":
             return { ...none, lot: "#8a8f94",
                      extra: part.dx === 3 && part.dy === 0 ? "crane" : (part.dx + part.dy) % 2 === 0 ? "containers" : "none",
                      items: part.dx === 0 && part.dy >= 2
                          ? [box(0.05, 0.05, 0.95, 0.95, 0.22, "#a4a9ae", "#6d7378", "gableU", "garage")] : [] };
-        case "airport": {
-            if (part.dx === 2 && part.dy === 0) { return { ...none, extra: "radar", lot: "#9a9a9a" }; }
-            if (part.dx <= 1 && part.dy <= 1) {
-                return { ...none, lot: "#9a9a9a",
-                         items: [box(0.04, 0.04, 0.96, 0.96, 0.22, "#c3d2e2", "#8a96a3", "flat", "glass")] };
-            }
-            if (part.dx >= 4 && part.dy <= 1) {
-                return { ...none, lot: "#9a9a9a",
-                         items: [box(0.06, 0.06, 0.94, 0.94, 0.28, "#b0b5ba", "#8d9297", "gableV", "garage")] };
-            }
-            return { ...none, ground: part.dy >= 4 ? "runway" : "none", lot: "#9a9a9a" };
-        }
+        case "airport":
+            return airport(part, none);
         case "stadium": {
             if (part.dx >= 1 && part.dx <= 2 && part.dy >= 1 && part.dy <= 2) {
                 return { ...none, ground: "field" };
@@ -285,8 +376,13 @@ export function requiredHeadroom(part: BuildingPart, tileWidth: number, variant 
         if (item.kind === "box") {
             const roof = item.roofStyle === "spire" ? 0.4 : item.rooftop === "antenna" ? 0.42 : 0.16;
             height = Math.max(height, item.height + roof);
-        } else if (item.kind === "tank" || item.kind === "chimney") {
+        } else if (item.kind === "tank" || item.kind === "chimney" || item.kind === "coolingTower" ||
+                   item.kind === "controlTower") {
             height = Math.max(height, item.height + 0.15);
+        } else if (item.kind === "dome") {
+            height = Math.max(height, item.height + item.radius * 0.6 + 0.05);
+        } else if (item.kind === "sign") {
+            height = Math.max(height, item.z + 0.2);
         }
     }
     if (design.extra === "crane" || design.extra === "radar") { height = Math.max(height, 0.85); }
@@ -638,6 +734,11 @@ function drawItem(ctx: CanvasRenderingContext2D, g: LocalGeometry, item: Item): 
             break;
         case "tree": drawTree(ctx, g, item); break;
         case "chimney": drawChimney(ctx, g, item); break;
+        case "coolingTower": drawCoolingTower(ctx, g, item); break;
+        case "dome": drawDome(ctx, g, item); break;
+        case "vehicle": drawVehicle(ctx, g, item); break;
+        case "sign": drawSign(ctx, g, item); break;
+        case "controlTower": drawControlTower(ctx, g, item); break;
         case "pile": {
             const c = g.localToScreen(item.u, item.v, 0);
             ctx.beginPath();
@@ -649,11 +750,118 @@ function drawItem(ctx: CanvasRenderingContext2D, g: LocalGeometry, item: Item): 
     }
 }
 
+function drawCoolingTower(ctx: CanvasRenderingContext2D, g: LocalGeometry, t: CoolingTower): void {
+    const w = g.tileWidth;
+    const base = g.localToScreen(t.u, t.v, 0);
+    const h = t.height * w;
+    const r = t.radius * w * 0.71;
+    // Umriss: unten breit, bei 70 % Höhe am schmalsten, oben wieder etwas breiter
+    const waist = r * 0.62;
+    const top = r * 0.72;
+    const body = ctx.createLinearGradient(base.x - r, 0, base.x + r, 0);
+    body.addColorStop(0, "#eceee9");
+    body.addColorStop(0.55, "#c9ccc5");
+    body.addColorStop(1, "#9ea29a");
+    ctx.beginPath();
+    ctx.ellipse(base.x, base.y, r, r / 2, 0, 0, Math.PI);
+    ctx.quadraticCurveTo(base.x - waist * 0.9, base.y - h * 0.7, base.x - top, base.y - h);
+    ctx.lineTo(base.x + top, base.y - h);
+    ctx.quadraticCurveTo(base.x + waist * 0.9, base.y - h * 0.7, base.x + r, base.y);
+    ctx.closePath();
+    ctx.fillStyle = body;
+    ctx.fill();
+    // Öffnung oben
+    ctx.beginPath();
+    ctx.ellipse(base.x, base.y - h, top, top / 2, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "#5f625c";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(base.x, base.y - h, top, top / 2, 0, Math.PI, Math.PI * 2);
+    ctx.strokeStyle = "#f4f5f2";
+    ctx.lineWidth = Math.max(1, w / 64);
+    ctx.stroke();
+}
+
+function drawDome(ctx: CanvasRenderingContext2D, g: LocalGeometry, d: Dome): void {
+    const w = g.tileWidth;
+    drawCylinder(ctx, g, d.u, d.v, d.radius, 0, d.height * w, d.colour);
+    const top = g.localToScreen(d.u, d.v, d.height * w);
+    const rx = d.radius * w * 0.71;
+    const dome = ctx.createRadialGradient(top.x - rx * 0.3, top.y - rx * 0.5, rx * 0.1, top.x, top.y, rx);
+    dome.addColorStop(0, "#ffffff");
+    dome.addColorStop(1, "#b9beb5");
+    ctx.beginPath();
+    ctx.ellipse(top.x, top.y, rx, rx * 0.6, 0, Math.PI, 0);
+    ctx.ellipse(top.x, top.y, rx, rx / 2, 0, 0, Math.PI);
+    ctx.fillStyle = dome;
+    ctx.fill();
+}
+
+function drawControlTower(ctx: CanvasRenderingContext2D, g: LocalGeometry, t: ControlTower): void {
+    const w = g.tileWidth;
+    drawCylinder(ctx, g, t.u, t.v, 0.1, 0, t.height * w * 0.8, "#d6d6d2");
+    drawCylinder(ctx, g, t.u, t.v, 0.2, t.height * w * 0.8, t.height * w * 0.12, "#5c8fb8");   // Glaskanzel
+    drawCylinder(ctx, g, t.u, t.v, 0.22, t.height * w * 0.92, t.height * w * 0.04, "#8e8e8a");  // Dach
+}
+
+/** Kleines Fahrzeug auf dem Hof (Löschfahrzeug, Streifenwagen) oder geparktes Flugzeug. */
+function drawVehicle(ctx: CanvasRenderingContext2D, g: LocalGeometry, v: Vehicle): void {
+    const w = g.tileWidth;
+    if (v.type === "plane") {
+        const c = g.localToScreen(v.u, v.v, w * 0.04);
+        ctx.beginPath();
+        ctx.ellipse(c.x + w * 0.05, c.y + w * 0.04, w * 0.22, w * 0.06, 0, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(c.x, c.y, w * 0.24, w * 0.055, -0.46, 0, Math.PI * 2);
+        ctx.fillStyle = "#f6f6f6";
+        ctx.fill();
+        polygon(ctx, [{ x: c.x - w * 0.02, y: c.y - w * 0.16 }, { x: c.x + w * 0.07, y: c.y },
+                      { x: c.x - w * 0.02, y: c.y + w * 0.16 }, { x: c.x - w * 0.06, y: c.y }], "#dcdcdc");
+        polygon(ctx, [{ x: c.x - w * 0.2, y: c.y + w * 0.06 }, { x: c.x - w * 0.23, y: c.y - w * 0.04 },
+                      { x: c.x - w * 0.17, y: c.y + w * 0.05 }], "#2c7fb8");
+        return;
+    }
+    const fire = v.type === "fireTruck";
+    const length = fire ? 0.32 : 0.22;
+    const u0 = v.u - length / 2;
+    const v0 = v.v - 0.09;
+    drawSmallBox(ctx, g, u0, v0, u0 + length, v0 + 0.18, 0, w * (fire ? 0.1 : 0.06), fire ? "#d0312d" : "#f2f4f7");
+    if (!fire) {
+        // blaue Streifen und Blaulicht
+        drawSmallBox(ctx, g, u0 + 0.04, v0, u0 + length - 0.04, v0 + 0.18, w * 0.03, w * 0.015, "#2e5aa8");
+        drawSmallBox(ctx, g, v.u - 0.02, v.v - 0.03, v.u + 0.02, v.v + 0.03, w * 0.06, w * 0.02, "#3d8bff");
+    } else {
+        drawSmallBox(ctx, g, u0 + 0.03, v0 + 0.03, u0 + length - 0.1, v0 + 0.15, w * 0.1, w * 0.015, "#c9c9c9");  // Leiter
+    }
+}
+
+/** Schild mit kurzem Text auf dem Dach. Der Text steht aufrecht, damit er gut lesbar ist. */
+function drawSign(ctx: CanvasRenderingContext2D, g: LocalGeometry, s: Sign): void {
+    const w = g.tileWidth;
+    const c = g.localToScreen(s.u, s.v, s.z * w + w * 0.06);
+    const size = Math.max(7, Math.round(w * (s.text.length > 3 ? 0.09 : 0.15)));
+    ctx.font = "bold " + size + "px sans-serif";
+    const width = ctx.measureText(s.text).width + size * 0.6;
+    const height = size * 1.3;
+    ctx.fillStyle = s.background;
+    ctx.fillRect(c.x - width / 2, c.y - height / 2, width, height);
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(c.x - width / 2, c.y - height / 2, width, height);
+    ctx.fillStyle = s.colour;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(s.text, c.x, c.y + 1);
+}
+
 /** Vordere Ecke eines Objekts (Reihenfolge innerhalb der Kachel: hinten zuerst). */
 function depthOf(item: Item): number {
     switch (item.kind) {
         case "box": return item.u1 + item.v1;
         case "tank": return item.u + item.v + item.radius * 2;
+        case "sign": return 9;   // Schilder zuletzt, damit sie oben liegen
         default: return item.u + item.v;
     }
 }
@@ -697,8 +905,20 @@ function drawGroundMarks(ctx: CanvasRenderingContext2D, g: LocalGeometry, design
             break;
         }
         case "runway":
-            polygon(ctx, [p(0, 0.1), p(1, 0.1), p(1, 0.9), p(0, 0.9)], "#4a4a4a");
-            polygon(ctx, [p(0.15, 0.47), p(0.55, 0.47), p(0.55, 0.53), p(0.15, 0.53)], "#f2f2f2");
+            polygon(ctx, [p(0, 0.06), p(1, 0.06), p(1, 0.94), p(0, 0.94)], "#4a4a4a");
+            polygon(ctx, [p(0, 0.08), p(1, 0.08), p(1, 0.11), p(0, 0.11)], "#e8e8e8");
+            polygon(ctx, [p(0, 0.89), p(1, 0.89), p(1, 0.92), p(0, 0.92)], "#e8e8e8");
+            polygon(ctx, [p(0.15, 0.48), p(0.55, 0.48), p(0.55, 0.52), p(0.15, 0.52)], "#f2f2f2");
+            break;
+        case "apron":
+            polygon(ctx, [p(0.47, 0), p(0.53, 0), p(0.53, 1), p(0.47, 1)], "rgba(242, 212, 59, 0.8)");   // Rollweg-Linie
+            break;
+        case "yard":
+            polygon(ctx, [p(0.05, 0.05), p(0.95, 0.05), p(0.95, 0.95), p(0.05, 0.95)], "#b9b4a8");
+            for (let i = 0; i < 5; i++) {
+                polygon(ctx, [p(0.1 + i * 0.18, 0.88), p(0.18 + i * 0.18, 0.88), p(0.18 + i * 0.18, 0.95),
+                              p(0.1 + i * 0.18, 0.95)], i % 2 === 0 ? "#d0312d" : "#f2f2f2");
+            }
             break;
     }
 }
