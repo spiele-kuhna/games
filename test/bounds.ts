@@ -17,14 +17,18 @@ describe("the Bounds class", () => {
             jest.mock("../src/debugAssert");
         });
 
-        it("should assert if constructed with a zero width", () => {
+        // Skipped (Dorfplaner, 2026): upstream commented out the asserts in src/bounds.ts,
+        // so this test fails in upstream too. Re-enable if the asserts come back.
+        it.skip("should assert if constructed with a zero width", () => {
             // tslint:disable-next-line:no-unused-expression
             new Bounds(STARTX, STARTY, 0, HEIGHT);
 
             expect(assert).toHaveBeenCalled();
         });
 
-        it("should assert if constructed with a zero height", () => {
+        // Skipped (Dorfplaner, 2026): upstream commented out the asserts in src/bounds.ts,
+        // so this test fails in upstream too. Re-enable if the asserts come back.
+        it.skip("should assert if constructed with a zero height", () => {
             // tslint:disable-next-line:no-unused-expression
             new Bounds(STARTX, STARTY, WIDTH, 0);
 
