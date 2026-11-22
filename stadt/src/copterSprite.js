@@ -25,7 +25,9 @@ function CopterSprite(map, spriteManager, x, y) {
   this.xOffset = -16;
   this.yOffset = -16;
   this.frame = 5;
-  this.count = 1500;
+  // Dorfplaner: kürzere Runde (Hubschrauber bewegen sich jetzt langsamer), dann zurück und landen
+  this.count = 450;
+  this.altitude = 1;
   this.destX = Random.getRandom(SpriteUtils.worldToPix(map.width)) + 8;
   this.destY = Random.getRandom(SpriteUtils.worldToPix(map.height)) + 8;
   this.origX = x;
@@ -68,10 +70,17 @@ CopterSprite.prototype.move = function(spriteCycle, disasterManager, blockMaps) 
 
     // If near destination, let's get her on the ground
     var absDist = SpriteUtils.absoluteDistance(this.x, this.y, this.origX, this.origY);
+    // Dorfplaner: im Anflug sinken
+    this.altitude = Math.min(1, absDist / 100);
     if (absDist < 30) {
       this.frame = 0;
+      this.spriteManager.copterRestUntil = this.spriteManager.spriteCycle + 300;
       return;
     }
+  } else if (SpriteUtils.absoluteDistance(this.x, this.y, this.destX, this.destY) < 30) {
+    // Dorfplaner: Ziel erreicht – nächstes Ziel suchen statt auf der Stelle zu kreisen
+    this.destX = Random.getRandom(SpriteUtils.worldToPix(this.map.width)) + 8;
+    this.destY = Random.getRandom(SpriteUtils.worldToPix(this.map.height)) + 8;
   }
 
   if (this.soundCount === 0) {

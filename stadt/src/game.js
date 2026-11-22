@@ -43,6 +43,7 @@ import { Text } from './text.js';
 import { TouchWarnWindow } from './touchWarnWindow.js';
 import { decorateToolButtons } from './ui/toolIcons.ts';
 import { MapWindow } from './ui/mapWindow.ts';
+import { SPRITE_AIRPLANE, SPRITE_HELICOPTER, SPRITE_TRAIN } from './spriteConstants.ts';
 
 var disasterTimeout = 20 * 1000;
 
@@ -872,7 +873,15 @@ var commonAnimate = function() {
       this._lastSpriteMove = now - SPRITE_STEP_MS;
     var steps = 0;
     while (now - this._lastSpriteMove >= SPRITE_STEP_MS && steps < 3) {
-      this.simulation.spriteManager.moveObjects(this.simulation._constructSimData());
+      // Flugzeuge und Hubschrauber nur jeden dritten, Züge jeden zweiten Schritt
+      var step = this._spriteStep = (this._spriteStep || 0) + 1;
+      this.simulation.spriteManager.moveObjects(this.simulation._constructSimData(), function(sprite) {
+        if (sprite.type === SPRITE_AIRPLANE || sprite.type === SPRITE_HELICOPTER)
+          return step % 3 === 0;
+        if (sprite.type === SPRITE_TRAIN)
+          return step % 2 === 0;
+        return true;
+      });
       this._lastSpriteMove += SPRITE_STEP_MS;
       steps++;
     }

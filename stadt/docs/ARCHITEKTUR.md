@@ -439,5 +439,5 @@ Touch, Symbolleiste, Menü, Übersichtskarte). Entscheidungen und Begründung: `
 | `src/iso/*` | Hangkacheln zeichnen, Picking mit Höhe |
 
 Nicht angefasst werden: Strom-, Verkehrs-, Budget- und Bewertungslogik. Bisherige begründete und freigegebene
-Eingriffe: Verkehrsfehler in `traffic.js` und die Wasserversorgung (4.4). Weitere Eingriffe nur nach Begründung
+Eingriffe: Verkehrsfehler in `traffic.js`, die Wasserversorgung (4.4) und das Flugverhalten (`airplaneSprite.js`: Rundflug, Rückkehr und Landung; `copterSprite.js`: kürzere Runde, wechselnde Ziele; Pausen am Boden in `spriteManager.js`). Das Tempo der Fahrzeuge regelt `game.js` (fester Takt, Flugzeuge/Hubschrauber jeden dritten, Züge jeden zweiten Schritt). Weitere Eingriffe nur nach Begründung
 und Freigabe.

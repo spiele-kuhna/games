@@ -32,7 +32,18 @@ function AirplaneSprite(map, spriteManager, x, y) {
     this.frame = 11;
   }
   this.destY = this.y;
+
+  // Dorfplaner: Rundflug über zwei bis drei Ziele, danach zurück zum Startpunkt (Flughafen) und landen
+  this.origX = this.x;
+  this.origY = this.y;
+  this.legs = 2 + Random.getRandom(1);
+  this.landing = false;
+  // Flughöhe 0 … 1 für die Darstellung (Start: steigt, Anflug: sinkt)
+  this.altitude = 0;
 }
+
+// Pause am Boden nach einer Landung (in Bewegungsschritten des SpriteManagers, etwa 16 je Sekunde)
+var PLANE_REST = 250;
 
 
 BaseSprite(AirplaneSprite);
@@ -61,10 +72,31 @@ AirplaneSprite.prototype.move = function(spriteCycle, disasterManager, blockMaps
   }
 
   var absDist = SpriteUtils.absoluteDistance(this.x, this.y, this.destX, this.destY);
-  if (absDist < 50) {
-    // We're pretty close to the destination
-    this.destX = Random.getRandom(SpriteUtils.worldToPix(this.map.width)) + 8;
-    this.destY = Random.getRandom(SpriteUtils.worldToPix(this.map.height)) + 8;
+  if (absDist < 50 && !this.landing) {
+    if (this.legs > 0) {
+      // We're pretty close to the destination
+      this.legs--;
+      this.destX = Random.getRandom(SpriteUtils.worldToPix(this.map.width)) + 8;
+      this.destY = Random.getRandom(SpriteUtils.worldToPix(this.map.height)) + 8;
+    } else {
+      // Dorfplaner: Rundflug zu Ende – zurück zum Flughafen
+      this.landing = true;
+      this.destX = this.origX;
+      this.destY = this.origY;
+    }
+  }
+
+  // Dorfplaner: Flughöhe für die Darstellung; im Anflug sinken und am Flughafen aufsetzen
+  if (this.landing) {
+    var home = SpriteUtils.absoluteDistance(this.x, this.y, this.origX, this.origY);
+    this.altitude = Math.min(1, home / 160);
+    if (home < 48) {
+      this.frame = 0;
+      this.spriteManager.planeRestUntil = this.spriteManager.spriteCycle + PLANE_REST;
+      return;
+    }
+  } else {
+    this.altitude = frame > 8 ? (12 - frame) / 4 : 1;
   }
 
   if (disasterManager.enableDisasters) {

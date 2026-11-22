@@ -44,6 +44,9 @@ interface WaterSourceLike {
     kindAt(x: number, y: number): number;
 }
 
+/** Sprite-Art Schiff (spriteConstants.ts) */
+const SHIP_SPRITE = 4;
+
 /** Ansteigende Brücken: größte Höhe (Rautenbreiten) und Länge der Rampe (Kacheln) */
 const BRIDGE_HEIGHT = 0.32;
 const BRIDGE_RAMP = 1.5;
@@ -356,7 +359,11 @@ export class IsoCanvas {
             this.drawTiles(ctx, rect, map, view, painter);
         }
         if (!this.underground) {
-            this.drawSprites(ctx, sprites, map, view);
+            // Schiffe zuerst, darüber die Brücken in ihrer Nähe (das Schiff fährt darunter durch), dann der Rest
+            const ships = sprites.filter((s) => s.type === SHIP_SPRITE);
+            this.drawSprites(ctx, ships, map, view);
+            this.drawBridgeDecksOver(ctx, ships, map, view);
+            this.drawSprites(ctx, sprites.filter((s) => s.type !== SHIP_SPRITE), map, view);
         }
         if (mouse) {
             this.drawMouseBox(ctx, mouse, map, view);
@@ -493,6 +500,45 @@ export class IsoCanvas {
             return [];
         }
         return this.sprites.getSpriteList().filter((s) => s.frame !== 0);
+    }
+
+    /** Brückenplatten rund um jedes Schiff noch einmal zeichnen, damit sie über dem Schiff liegen. */
+    private drawBridgeDecksOver(ctx: CanvasRenderingContext2D, ships: SpriteLike[], map: MapLike,
+                                view: ViewParams): void {
+        if (ships.length === 0) {
+            return;
+        }
+        const painter = this.requirePainter();
+        const size = viewSize(map, this.rotation);
+        const done: { [key: string]: boolean } = {};
+        const tiles: Array<[number, number]> = [];
+        for (const ship of ships) {
+            const centre = spriteCentre(ship);
+            const point = this.mapPointToViewPoint(centre.x, centre.y, map);
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    const vx = Math.floor(point.x) + dx;
+                    const vy = Math.floor(point.y) + dy;
+                    const key = vx + "," + vy;
+                    if (vx >= 0 && vy >= 0 && vx < size.width && vy < size.height && !done[key]) {
+                        done[key] = true;
+                        tiles.push([vx, vy]);
+                    }
+                }
+            }
+        }
+        // von hinten nach vorn
+        tiles.sort((a, b) => (a[0] + a[1]) - (b[0] + b[1]));
+        for (const [vx, vy] of tiles) {
+            const request = this.paintRequestFor(vx, vy, map);
+            if (!request.bridgeHeights) {
+                continue;
+            }
+            const top = projectToScreen(vx, vy, 0, view);
+            const px = Math.round(top.x * this.pixelRatio) / this.pixelRatio;
+            const py = Math.round(top.y * this.pixelRatio) / this.pixelRatio;
+            painter.drawTile(ctx, px, py, { ...request, deckOnly: true });
+        }
     }
 
     private drawSprites(ctx: CanvasRenderingContext2D, sprites: SpriteLike[], map: MapLike, view: ViewParams): void {

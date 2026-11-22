@@ -73,7 +73,9 @@ SpriteManager.prototype.getSpritesInView = function(startX, startY, pixelWidth, 
 };
 
 
-SpriteManager.prototype.moveObjects = function(simData) {
+// Dorfplaner: shouldMove (optional) entscheidet je Sprite, ob es in diesem Schritt weiterzieht – damit lässt
+// game.js Flugzeuge, Hubschrauber und Züge langsamer fahren als Schiffe, Monster oder Tornados.
+SpriteManager.prototype.moveObjects = function(simData, shouldMove) {
   var disasterManager = simData.disasterManager;
   var blockMaps = simData.blockMaps;
 
@@ -85,6 +87,9 @@ SpriteManager.prototype.moveObjects = function(simData) {
     var sprite = list[i];
 
     if (sprite.frame === 0)
+      continue;
+
+    if (shouldMove && !shouldMove(sprite))
       continue;
 
     sprite.move(this.spriteCycle, disasterManager, blockMaps);
@@ -138,6 +143,10 @@ SpriteManager.prototype.makeExplosionAt = function(x, y) {
 
 SpriteManager.prototype.generatePlane = function(x, y) {
   if (this.getSprite(SpriteConstants.SPRITE_AIRPLANE) !== null)
+    return;
+
+  // Dorfplaner: Nach einer Landung steht das Flugzeug eine Weile am Flughafen, bevor das nächste startet
+  if (this.planeRestUntil && this.spriteCycle < this.planeRestUntil)
     return;
 
   this.makeSprite(SpriteConstants.SPRITE_AIRPLANE,
@@ -226,6 +235,10 @@ SpriteManager.prototype.makeShipHere = function(x, y) {
 
 SpriteManager.prototype.generateCopter = function(x, y) {
   if (this.getSprite(SpriteConstants.SPRITE_HELICOPTER) !== null)
+    return;
+
+  // Dorfplaner: Pause am Boden nach der Landung
+  if (this.copterRestUntil && this.spriteCycle < this.copterRestUntil)
     return;
 
   this.makeSprite(SpriteConstants.SPRITE_HELICOPTER,

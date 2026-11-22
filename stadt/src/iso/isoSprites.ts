@@ -58,6 +58,8 @@ function enterGroundPlane(ctx: CanvasRenderingContext2D, x: number, y: number, w
 export interface SpriteLike {
     readonly type: number;
     readonly frame: number;
+    /** Dorfplaner: Flughöhe 0 … 1 (Flugzeug beim Start und Anflug, Hubschrauber beim Landen) */
+    readonly altitude?: number;
     readonly x: number;
     readonly y: number;
     readonly xOffset: number;
@@ -236,7 +238,7 @@ function drawOrientedTrain(ctx: CanvasRenderingContext2D, x: number, y: number, 
  */
 export function drawSprite(ctx: CanvasRenderingContext2D, sprite: SpriteLike, x: number, y: number, w: number,
                            rotation = 0): void {
-    const lift = flightHeight(sprite.type) * w;
+    const lift = flightHeight(sprite.type) * w * (sprite.altitude === undefined ? 1 : Math.max(0.05, sprite.altitude));
     if (lift > 0) {
         // Schatten auf dem Boden, damit man sieht, wo das Fluggerät gerade ist
         ellipse(ctx, x, y, w * 0.18, w * 0.07, "rgba(0, 0, 0, 0.25)");

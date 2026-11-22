@@ -104,6 +104,8 @@ export interface PaintRequest {
     readonly water?: WaterLook | null;
     /** Dorfplaner: Höhe der Brückenfahrbahn an den Kachelkanten (Ansichtsrichtungen, in Rautenbreiten) */
     readonly bridgeHeights?: BridgeHeights | null;
+    /** Dorfplaner: nur die Fahrbahnplatte einer Brücke zeichnen (über einem Schiff, das darunter durchfährt) */
+    readonly deckOnly?: boolean;
 }
 
 /** Höhe einer ansteigenden Brücke an den vier Kachelkanten (nur die Kanten mit Fahrbahn zählen) */
@@ -130,15 +132,38 @@ export interface WaterLook {
     readonly noWater: boolean;
 }
 
-/** Ein zwischengespeichertes Kachelbild und wie weit es über die Rautenspitze hinausragt. */
-interface CachedImage {
+/** Ein frisch gezeichnetes Kachelbild und wie weit es über die Rautenspitze hinausragt. */
+interface RenderedImage {
     canvas: HTMLCanvasElement;
     headroom: number;
 }
 
+/** Ein zwischengespeichertes Kachelbild: Ausschnitt (sx, sy, sw, sh) aus einer Sammelbild-Seite. */
+interface CachedImage {
+    page: HTMLCanvasElement;
+    sx: number;
+    sy: number;
+    sw: number;
+    sh: number;
+    headroom: number;
+}
+
+/*
+ * Sammelbild (Textur-Atlas): Statt tausender kleiner Canvas-Elemente liegen alle Kachelbilder nebeneinander in
+ * wenigen großen Seiten. Der Browser kann dann beim Zeichnen bei derselben Grafik-Textur bleiben – das ist der
+ * wichtigste Grund, warum Verschieben und Zoomen flüssig laufen. Gefüllt wird zeilenweise („Regalbretter“).
+ */
+const ATLAS_PAGE = 2048;
+/** Mehr Seiten nicht – dann wird der Zwischenspeicher geleert und bei Bedarf neu gefüllt. */
+const ATLAS_MAX_PAGES = 10;
+
 export class IsoTilePainter {
 
     private cache: { [key: string]: CachedImage } = {};
+    private pages: HTMLCanvasElement[] = [];
+    private shelfX = 0;
+    private shelfY = 0;
+    private shelfHeight = 0;
 
     /**
      * @param tileWidth Breite einer Raute in CSS-Pixeln
@@ -163,8 +188,40 @@ export class IsoTilePainter {
     /** Zeichnet eine Kachel, deren obere Rautenspitze bei (sx, sy) liegt. */
     drawTile(ctx: CanvasRenderingContext2D, sx: number, sy: number, request: PaintRequest): void {
         const image = this.imageFor(request);
-        ctx.drawImage(image.canvas, sx - this.tileWidth / 2, sy - image.headroom,
+        ctx.drawImage(image.page, image.sx, image.sy, image.sw, image.sh, sx - this.tileWidth / 2, sy - image.headroom,
                       this.tileWidth, this.tileHeight + image.headroom);
+    }
+
+    /** Frisch gezeichnetes Bild ins Sammelbild kopieren und den Ausschnitt merken. */
+    private store(image: RenderedImage): CachedImage {
+        const w = image.canvas.width;
+        const h = image.canvas.height;
+        if (this.pages.length > 0 && this.shelfX + w > ATLAS_PAGE) {
+            // nächstes Regalbrett
+            this.shelfX = 0;
+            this.shelfY += this.shelfHeight + 1;
+            this.shelfHeight = 0;
+        }
+        if (this.pages.length === 0 || this.shelfY + h > ATLAS_PAGE) {
+            if (this.pages.length >= ATLAS_MAX_PAGES) {
+                // voll: alles verwerfen, die sichtbaren Kacheln werden sofort neu gezeichnet
+                this.cache = {};
+                this.pages = [];
+            }
+            const page = document.createElement("canvas");
+            page.width = ATLAS_PAGE;
+            page.height = ATLAS_PAGE;
+            this.pages.push(page);
+            this.shelfX = 0;
+            this.shelfY = 0;
+            this.shelfHeight = 0;
+        }
+        const page = this.pages[this.pages.length - 1];
+        (page.getContext("2d") as CanvasRenderingContext2D).drawImage(image.canvas, this.shelfX, this.shelfY);
+        const cached = { headroom: image.headroom, page, sh: h, sw: w, sx: this.shelfX, sy: this.shelfY };
+        this.shelfX += w + 1;
+        this.shelfHeight = Math.max(this.shelfHeight, h);
+        return cached;
     }
 
     /** Anzahl der zwischengespeicherten Kachelbilder (für Tests und Leistungsmessung). */
@@ -183,24 +240,39 @@ export class IsoTilePainter {
                      request.lightning, waterKey(request.water),
                      request.bridgeHeights ? [request.bridgeHeights.north, request.bridgeHeights.east,
                                               request.bridgeHeights.south, request.bridgeHeights.west].join(",")
-                                           : "-"].join("|");
+                                           : "-", request.deckOnly ? "deck" : ""].join("|");
         let image = this.cache[key];
         if (!image) {
-            image = this.renderImage(request);
+            image = this.store(this.renderImage(request));
             this.cache[key] = image;
         }
         return image;
     }
 
-    private renderImage(request: PaintRequest): CachedImage {
+    private renderImage(request: PaintRequest): RenderedImage {
         if (request.water && request.water.underground) {
             return this.renderUnderground(request, request.water);
         }
+        if (request.deckOnly && request.bridgeHeights) {
+            // nur die Brückenfahrbahn, ringsum durchsichtig
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.ceil(this.tileWidth * this.pixelRatio);
+            canvas.height = Math.ceil((this.tileHeight + this.headroom) * this.pixelRatio);
+            const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
+            ctx.scale(this.pixelRatio, this.pixelRatio);
+            ctx.translate(this.tileWidth / 2, this.headroom);
+            this.drawElevatedBridge(ctx, request.look.roads, request.bridgeHeights);
+            return { canvas, headroom: this.headroom };
+        }
         const noWater = request.water ? request.water.noWater : false;
-        // Gebäude brauchen mehr Platz nach oben als flache Kacheln
+        // Gebäude brauchen mehr Platz nach oben als flache Kacheln. Ganz flache Kacheln (Wiese, Wasser, Straße,
+        // Schiene) bekommen fast keinen Platz darüber – leere, durchsichtige Fläche kostet beim Zeichnen genauso
+        // viel Zeit wie sichtbare.
+        const look0 = request.look;
+        const flat = request.building === null && look0.cover === "none" && look0.wires === 0 && !request.bridgeHeights;
         let headroom = request.building !== null
             ? Math.max(this.headroom, requiredHeadroom(request.building, this.tileWidth, request.variant) + 4)
-            : this.headroom;
+            : flat ? Math.ceil(this.tileWidth * 0.06) : this.headroom;
         if (request.smoke || request.lightning || noWater) {
             headroom += Math.ceil(this.tileWidth * 0.5);   // Platz für Rauchwolken, Blitz bzw. Tropfen
         }
@@ -245,8 +317,8 @@ export class IsoTilePainter {
      * Untergrundansicht: nur Boden (abgedunkelt), Gebäude als flache Grundfläche, darüber die Wasserrohre.
      * Grau = ohne Wasser, blau = Wasser fließt; versorgte Gebäude sind blau getönt.
      */
-    private renderUnderground(request: PaintRequest, water: WaterLook): CachedImage {
-        const headroom = this.headroom;
+    private renderUnderground(request: PaintRequest, water: WaterLook): RenderedImage {
+        const headroom = Math.ceil(this.tileWidth * 0.06);
         const canvas = document.createElement("canvas");
         canvas.width = Math.ceil(this.tileWidth * this.pixelRatio);
         canvas.height = Math.ceil((this.tileHeight + headroom) * this.pixelRatio);
