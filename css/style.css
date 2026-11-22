@@ -11,7 +11,8 @@
  *
  */
 
-@import url(https://fonts.googleapis.com/css?family=Open+Sans:400,300,600,300italic,400italic);
+/* Dorfplaner, 2026: Open Sans is no longer loaded from Google Fonts (no third-party requests,
+ * GDPR). Uses an installed Open Sans if present, otherwise the system sans-serif font. */
 
 * {
   padding: 0;
@@ -213,7 +214,7 @@ nav li {
 }
 
 .open {
-  font-family: 'Open Sans', sans-serif;
+  font-family: 'Open Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
 .opinion, .statistics {

@@ -12,37 +12,40 @@
  * (Micropolis Corporation, the "licensor") and is licensed here to the authors/publishers of the "Micropolis"
  * city simulation game and its source code (the project or "licensee(s)") as a courtesy of the owner.
  *
+ * Modified for Dorfplaner (https://github.com/spiele-kuhna/games), 2026: renamed, removed
+ * third-party Twitter widget and donation requests, added source code link.
+ *
  * -->
 
 <html>
   <head>
     <meta charset="UTF-8">
-    <meta name="description" content="Play micropolisJS and build a virtual city in your browser! micropolisJS a hand-written HTML5/Javascript port of the game Micropolis, the open-source release of the 1989 version of SimCity.">
+    <meta name="description" content="About Dorfplaner, a modified version of micropolisJS, the HTML5/Javascript port of the open-source city simulator Micropolis.">
     <link rel="stylesheet" media="screen" type="text/css" href="css/style.css">
-    <title>About | micropolisJS</title>
+    <title>About | Dorfplaner</title>
   </head>
   <body>
     <header id="aboutHeader" class="chunk border-bottom padding10">
       <div class="left inlineblock">
-        <h1 id="title" class="white fontlarge"><a href="index.html">micropolisJS</a></h1>
+        <h1 id="title" class="white fontlarge"><a href="index.html">Dorfplaner</a></h1>
       </div>
       <nav class="white right padding10 inlineblock">
         <ul>
           <li class="padding10"><a href="about.html">About</a></li>
-          <li class="padding10"><a href="https://github.com/graememcc/micropolisJS">GitHub</a></li>
+          <li class="padding10"><a href="https://github.com/spiele-kuhna/games/tree/main/stadt">Source</a></li>
         </ul>
       </nav>
     </header>
     <main id="aboutMain">
       <div id="aboutContainer" class="mintcream open padding10">
         <div id="appeal" class="padding10">
-          <h2 class="alignCenter chunk">Support micropolisJS</h2>
-          <p><a href="http://www.graememcc.co.uk/2013/10/27/reticulating-splines">This is just the beginning</a>. <s>Please <a href="https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=TV83GP5CJGL3Q&lc=GB&item_name=micropolisJS&no_note=1&no_shipping=1&currency_code=GBP&bn=PP%2dDonationsBF%3abtn_donateCC_LG%2egif%3aNonHosted">support micropolisJS</a>. Allow me to develop it further and make it better! Let's make it the best old-school-retro-but-really-running-on-modern-open-web-technologies city simulator&trade; anywhere!</s>. Edit: Mar 7, 2022: I no longer need donations to keep this alive, and can't promise to get back to it any time soon. However, if it entertained you then a donation to <a href="https://www.refuweegee.co.uk/your-donations">Refuweegee</a>, a charity that does great work assisting refugees in Scotland, would be welcomed.</p>
-          <p>Oh, and you absolutely should donate to <a href="https://one.laptop.org/action/donate">One Laptop Per Child</a> too.</p>
+          <h2 class="alignCenter chunk">About Dorfplaner</h2>
+          <p>Dorfplaner is a school project that extends micropolisJS by Graeme McCutcheon. We are adding an isometric view and touch controls for tablets. The city simulation itself comes from micropolisJS and the original Micropolis source code.</p>
+          <p>Dorfplaner is free software under the GNU GPL v3 with additional terms (see <a href="LICENSE">LICENSE</a> and <a href="COPYING">COPYING</a>). The complete source code is available at <a href="https://github.com/spiele-kuhna/games/tree/main/stadt">github.com/spiele-kuhna/games/tree/main/stadt</a>.</p>
         </div>
         <h3 class="alignCenter chunk">Welcome to your city!</h3>
         <p>
-          micropolisJS is a handmade port of <a href="http://code.google.com/p/micropolis/">Micropolis</a> to Javascript. (Micropolis is the open-source release of a commercial game once sold by Electronic Arts). The aim is to grow your city, balancing the various competing demands. Use the buttons in the toolbox to select the various zones and buildings, and then click on the desired location to build.
+          Dorfplaner is based on micropolisJS, a handmade port of <a href="http://code.google.com/p/micropolis/">Micropolis</a> to Javascript. (Micropolis is the open-source release of a commercial game once sold by Electronic Arts). The aim is to grow your city, balancing the various competing demands. Use the buttons in the toolbox to select the various zones and buildings, and then click on the desired location to build.
         </p>
           <ul>
           <li><strong>Residential zones:</strong> Your citizens need somewhere to live! Use this tool to lay out residential zones, and watch people move in. Watch out though: no-one wants to live anywhere polluted!</li>
@@ -90,8 +93,8 @@
       </div>
     </main>
     <footer id="aboutFooter" class="alignCenter chunk white padding10">
-      Enjoyed micropolisJS? <a href="https://www.refuweegee.co.uk/your-donations">Click here to donate to a charity whose work I love!</a>
-        <div id="author" class="open">Brought to you by <a rel="author" href="http://www.graememcc.co.uk" target="_blank">Graeme McCutcheon</a><i><a rel="author" href="https://twitter.com/graememcc" target="_blank">(@graememcc)</a></i> and <a rel="author" href="https://github.com/graememcc/micropolisJS/graphs/contributors" target="_blank">contributors</a>
+      Dorfplaner is a modified version of <a href="https://github.com/graememcc/micropolisJS" target="_blank">micropolisJS</a>. Source code (GPLv3): <a href="https://github.com/spiele-kuhna/games/tree/main/stadt" target="_blank">github.com/spiele-kuhna/games</a>
+        <div id="author" class="open">Original micropolisJS by <a rel="author" href="http://www.graememcc.co.uk" target="_blank">Graeme McCutcheon</a><i><a rel="author" href="https://twitter.com/graememcc" target="_blank">(@graememcc)</a></i> and <a rel="author" href="https://github.com/graememcc/micropolisJS/graphs/contributors" target="_blank">contributors</a>
           <div id="build">Build: <%= htmlWebpackPlugin.options.gitHash %></div>
         </div>
         <div class="nameLicense">
