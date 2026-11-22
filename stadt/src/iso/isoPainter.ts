@@ -30,7 +30,8 @@ import { EAST, NORTH, SOUTH, TileLook, Traffic, WEST, ZoneType } from "./tileKin
 
 /** Farben – alle selbst gewählt. */
 const COLOURS = {
-    asphalt: "#5b5e63",
+    asphalt: "#4f5257",
+    sidewalk: "#c8c2b4",
     asphaltEdge: "#44474b",
     ballast: "#8a8176",
     bridgeDeck: "#7b7f86",
@@ -39,7 +40,7 @@ const COLOURS = {
     fireOrange: "#f08a24",
     fireYellow: "#ffd23f",
     flood: "#6f8fa8",
-    grass: ["#7aa95c", "#76a458", "#7ead60", "#73a055"],
+    grass: ["#7cab5c", "#77a557", "#80af61", "#74a254"],
     gridLine: "rgba(0, 0, 0, 0.07)",
     laneMark: "rgba(255, 255, 255, 0.75)",
     pole: "#6b4f35",
@@ -123,7 +124,7 @@ export class IsoTilePainter {
 
     /** So hoch kann ein Gebäude höchstens über seine Kachel hinausragen (für den sichtbaren Ausschnitt). */
     get maxHeadroom(): number {
-        return Math.ceil(this.tileWidth * 1.7);
+        return Math.ceil(this.tileWidth * 2.5);
     }
 
     /** Zeichnet eine Kachel, deren obere Rautenspitze bei (sx, sy) liegt. */
@@ -157,7 +158,7 @@ export class IsoTilePainter {
     private renderImage(request: PaintRequest): CachedImage {
         // Gebäude brauchen mehr Platz nach oben als flache Kacheln
         let headroom = request.building !== null
-            ? Math.max(this.headroom, requiredHeadroom(request.building, this.tileWidth) + 4)
+            ? Math.max(this.headroom, requiredHeadroom(request.building, this.tileWidth, request.variant) + 4)
             : this.headroom;
         if (request.smoke || request.lightning) {
             headroom += Math.ceil(this.tileWidth * 0.5);   // Platz für Rauchwolken bzw. den Blitz
@@ -174,7 +175,7 @@ export class IsoTilePainter {
         const look = request.look;
         this.drawGround(ctx, request);
         if (look.cover === "zone") {
-            this.drawZone(ctx, look.zone, request.building, request.frame);
+            this.drawZone(ctx, look.zone, request.building, request.frame, request.variant);
         } else {
             this.drawCover(ctx, look, request.variant, request.frame);
         }
@@ -185,7 +186,7 @@ export class IsoTilePainter {
         if (look.rails !== 0) { this.drawRails(ctx, look.rails); }
         if (look.wires !== 0) { this.drawWires(ctx, look.wires); }
 
-        const top = request.building !== null ? smokeBase(request.building, this.tileWidth) : 0;
+        const top = request.building !== null ? smokeBase(request.building, this.tileWidth, request.variant) : 0;
         if (request.smoke && request.frame >= 0) { drawSmoke(ctx, this, top, request.frame); }
         if (request.lightning) { drawLightning(ctx, this, top); }
         return { canvas, headroom };
@@ -196,16 +197,16 @@ export class IsoTilePainter {
      * Brunnen im Park stehen nicht in der Gebäudetabelle, werden aber genauso gezeichnet.
      */
     private drawZone(ctx: CanvasRenderingContext2D, zone: ZoneType | null, building: BuildingPart | null,
-                     frame: number): void {
+                     frame: number, variant: number): void {
         if (zone === "park") {
-            drawBuildingPart(ctx, this, { dx: 0, dy: 0, level: 0, size: 1, value: 0, zone: "park" }, frame);
+            drawBuildingPart(ctx, this, { dx: 0, dy: 0, level: 0, size: 1, value: 0, zone: "park" }, frame, variant);
             return;
         }
         if (building === null || building.level < 0) {
             this.drawZonePlaceholder(ctx, zone);
             return;
         }
-        drawBuildingPart(ctx, this, building, frame);
+        drawBuildingPart(ctx, this, building, frame, variant);
     }
 
     /*
@@ -304,6 +305,7 @@ export class IsoTilePainter {
     private drawGround(ctx: CanvasRenderingContext2D, request: PaintRequest): void {
         if (request.look.ground === "water") {
             this.fillDiamond(ctx, COLOURS.water[request.variant]);
+            this.drawWaves(ctx, request.variant);
             // Sandstrand an den Seiten, an denen Land angrenzt
             const beach = 0.16;
             if (request.landSides & NORTH) { this.fillLocalRect(ctx, 0, 0, 1, beach, COLOURS.sand); }
@@ -314,6 +316,7 @@ export class IsoTilePainter {
         }
 
         this.fillDiamond(ctx, COLOURS.grass[request.variant]);
+        this.drawGrassTexture(ctx, request.variant);
         // Ganz feines Raster, damit man die Kacheln beim Bauen abzählen kann
         const top = this.localToScreen(0, 0);
         const right = this.localToScreen(1, 0);
@@ -325,6 +328,40 @@ export class IsoTilePainter {
         ctx.strokeStyle = COLOURS.gridLine;
         ctx.lineWidth = 1;
         ctx.stroke();
+    }
+
+    /** Feste „Zufallszahl“ 0–1 für Kachelvariante und Nummer – damit Muster nicht überall gleich aussehen. */
+    private noise(variant: number, k: number): number {
+        const x = Math.sin(variant * 91.7 + k * 47.3) * 24634.6345;
+        return x - Math.floor(x);
+    }
+
+    /** Wiese: helle und dunkle Grasbüschel als kleine Striche. */
+    private drawGrassTexture(ctx: CanvasRenderingContext2D, variant: number): void {
+        for (let i = 0; i < 14; i++) {
+            const u = 0.06 + this.noise(variant, i) * 0.88;
+            const v = 0.06 + this.noise(variant, i + 50) * 0.88;
+            const p = this.localToScreen(u, v);
+            ctx.fillStyle = i % 3 === 0 ? "rgba(255, 255, 220, 0.16)" : "rgba(20, 60, 10, 0.16)";
+            ctx.fillRect(p.x, p.y - 1.5, Math.max(1, this.tileWidth / 48), Math.max(1.5, this.tileWidth / 30));
+        }
+    }
+
+    /** Wasser: ein paar helle Wellenstriche. */
+    private drawWaves(ctx: CanvasRenderingContext2D, variant: number): void {
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.28)";
+        ctx.lineWidth = Math.max(1, this.tileWidth / 64);
+        for (let i = 0; i < 3; i++) {
+            const u = 0.2 + this.noise(variant, i) * 0.55;
+            const v = 0.2 + this.noise(variant, i + 9) * 0.55;
+            const a = this.localToScreen(u, v);
+            const len = this.tileWidth * 0.08;
+            ctx.beginPath();
+            ctx.moveTo(a.x - len, a.y);
+            ctx.quadraticCurveTo(a.x - len / 2, a.y - len * 0.3, a.x, a.y);
+            ctx.quadraticCurveTo(a.x + len / 2, a.y + len * 0.3, a.x + len, a.y);
+            ctx.stroke();
+        }
     }
 
     // ---- Bewuchs, Trümmer, Zonen ----------------------------------------------------------------------------
@@ -351,15 +388,42 @@ export class IsoTilePainter {
         // Hintere Bäume zuerst, damit vordere sie überdecken (kleine Summe u + v = weiter hinten).
         chosen.sort((a, b) => (a[0] + a[1]) - (b[0] + b[1]));
 
-        const crown = this.tileWidth * 0.11;
         for (let i = 0; i < chosen.length; i++) {
             const base = this.localToScreen(chosen[i][0], chosen[i][1]);
-            ctx.fillStyle = COLOURS.treeTrunk;
-            ctx.fillRect(base.x - crown * 0.15, base.y - crown * 1.2, crown * 0.3, crown * 1.2);
+            const size = this.tileWidth * (0.09 + this.noise(variant, i + 20) * 0.04);
+            const conifer = this.noise(variant, i + 30) < 0.35;
+            // Schatten nach rechts
             ctx.beginPath();
-            ctx.arc(base.x, base.y - crown * 1.6, crown, 0, Math.PI * 2);
-            ctx.fillStyle = COLOURS.treeCrown[(i + variant) % COLOURS.treeCrown.length];
+            ctx.ellipse(base.x + size * 0.6, base.y + size * 0.1, size * 0.9, size * 0.35, 0, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(20, 40, 10, 0.25)";
             ctx.fill();
+            ctx.fillStyle = COLOURS.treeTrunk;
+            ctx.fillRect(base.x - size * 0.12, base.y - size * 1.1, size * 0.24, size * 1.1);
+            if (conifer) {
+                ctx.beginPath();
+                ctx.moveTo(base.x - size * 0.8, base.y - size * 0.6);
+                ctx.lineTo(base.x, base.y - size * 3.1);
+                ctx.lineTo(base.x + size * 0.8, base.y - size * 0.6);
+                ctx.closePath();
+                ctx.fillStyle = "#2d5e34";
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(base.x, base.y - size * 3.1);
+                ctx.lineTo(base.x + size * 0.8, base.y - size * 0.6);
+                ctx.lineTo(base.x + size * 0.1, base.y - size * 0.6);
+                ctx.closePath();
+                ctx.fillStyle = "#224a29";
+                ctx.fill();
+            } else {
+                ctx.beginPath();
+                ctx.arc(base.x, base.y - size * 1.7, size, 0, Math.PI * 2);
+                ctx.fillStyle = COLOURS.treeCrown[(i + variant) % COLOURS.treeCrown.length];
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(base.x - size * 0.3, base.y - size * 2, size * 0.55, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(160, 210, 120, 0.45)";
+                ctx.fill();
+            }
         }
     }
 
@@ -411,8 +475,15 @@ export class IsoTilePainter {
     /** Leere Zone: farbige Fläche mit dunklerem Rand – hier darf gebaut werden, es steht aber noch nichts. */
     private drawZonePlaceholder(ctx: CanvasRenderingContext2D, zone: ZoneType | null): void {
         const colour = zone !== null ? ZONE_COLOURS[zone] : "#999";
-        this.fillLocalRect(ctx, 0.04, 0.04, 0.96, 0.96, "rgba(0, 0, 0, 0.25)");
-        this.fillLocalRect(ctx, 0.1, 0.1, 0.9, 0.9, colour);
+        ctx.globalAlpha = 0.45;
+        this.fillLocalRect(ctx, 0.03, 0.03, 0.97, 0.97, colour);
+        ctx.globalAlpha = 1;
+        // Rand wie abgesteckt: kurze Striche in der Zonenfarbe
+        for (let i = 0; i < 6; i++) {
+            const a = 0.05 + i * 0.16;
+            this.fillLocalRect(ctx, a, 0.03, a + 0.08, 0.07, colour);
+            this.fillLocalRect(ctx, 0.03, a, 0.07, a + 0.08, colour);
+        }
     }
 
     // ---- Verkehrswege und Leitungen -------------------------------------------------------------------------
@@ -426,14 +497,15 @@ export class IsoTilePainter {
     }
 
     private drawRoads(ctx: CanvasRenderingContext2D, mask: number, bridge: boolean): void {
-        const edge = bridge ? COLOURS.bridgeRail : COLOURS.asphaltEdge;
+        const edge = bridge ? COLOURS.bridgeRail : COLOURS.sidewalk;
         const surface = bridge ? COLOURS.bridgeDeck : COLOURS.asphalt;
 
-        // Erst der etwas breitere Rand, dann die Fahrbahn darauf
-        this.forEachDirection(mask, (d) => this.fillArm(ctx, d, 0.3, 0.7, edge));
-        this.fillLocalRect(ctx, 0.3, 0.3, 0.7, 0.7, edge);
-        this.forEachDirection(mask, (d) => this.fillArm(ctx, d, 0.34, 0.66, surface));
-        this.fillLocalRect(ctx, 0.34, 0.34, 0.66, 0.66, surface);
+        // Erst der Gehweg (bzw. das Brückengeländer), dann die Fahrbahn darauf
+        this.forEachDirection(mask, (d) => this.fillArm(ctx, d, 0.24, 0.76, edge));
+        this.fillLocalRect(ctx, 0.24, 0.24, 0.76, 0.76, edge);
+        this.forEachDirection(mask, (d) => this.fillArm(ctx, d, 0.24, 0.255, "rgba(0, 0, 0, 0.18)"));
+        this.forEachDirection(mask, (d) => this.fillArm(ctx, d, 0.32, 0.68, surface));
+        this.fillLocalRect(ctx, 0.32, 0.32, 0.68, 0.68, surface);
 
         // Mittellinie als kurze Striche, nicht auf Kreuzungen
         const isStraight = mask === (NORTH | SOUTH) || mask === (EAST | WEST);
