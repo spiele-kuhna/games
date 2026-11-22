@@ -115,6 +115,9 @@
               <button id="budgetRequest" class="miscButton">Haushalt</button>
             </div>
             <div>
+              <button id="mapRequest" class="miscButton" title="Übersichtskarte mit Einblendungen (M)">Karte</button>
+            </div>
+            <div>
               <button id="evalRequest" class="miscButton">Bewertung</button>
             </div>
             <div>
@@ -178,6 +181,12 @@
           <div>
             <button id="debugRequest">Entwickler</button>
           </div>
+        </div>
+        <div id="mapPanel" class="mintcream controlShadow z1" role="dialog" aria-label="Übersichtskarte">
+          <div class="mapHeader"><span>Karte</span><button type="button" class="mapClose" aria-label="Karte schließen">&times;</button></div>
+          <canvas class="mapCanvas" title="Klick: Ansicht hierhin verschieben"></canvas>
+          <div class="mapOverlays" role="toolbar" aria-label="Einblendung wählen"></div>
+          <div class="mapLegend"></div>
         </div>
         <div id="viewControls" class="z1 initialHidden" role="toolbar" aria-label="Ansicht drehen und zoomen">
           <button id="rotateLeft" type="button" title="Nach links drehen (Q)" aria-label="Nach links drehen">&#x21BA;</button>

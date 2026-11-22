@@ -42,6 +42,7 @@ import { Storage } from './storage.js';
 import { Text } from './text.js';
 import { TouchWarnWindow } from './touchWarnWindow.js';
 import { decorateToolButtons } from './ui/toolIcons.ts';
+import { MapWindow } from './ui/mapWindow.ts';
 
 var disasterTimeout = 20 * 1000;
 
@@ -89,6 +90,7 @@ function Game(gameMap, tileSet, snowTileSet, spriteSheet, difficulty, name) {
   decorateToolButtons(document);
   this.inputStatus = new InputStatus(this.gameMap, tileSet.tileWidth, this.simulation.waterManager);
   this.setupUnderground();
+  this.setupMap();
   // Dorfplaner: Maus und Finger auf der Karte wirken auf die gerade aktive Ansicht
   this.inputStatus.setView(this.gameCanvas);
 
@@ -275,6 +277,32 @@ function Game(gameMap, tileSet, snowTileSet, spriteSheet, difficulty, name) {
  * Sie schaltet sich beim Rohr-, Pumpen- und Turmwerkzeug ein und bei anderen Werkzeugen wieder aus; mit der
  * Planierraupe bleibt sie, wie sie ist (dann entfernt die Planierraupe Rohre). Knopf und Taste U schalten von Hand.
  */
+// Dorfplaner: Übersichtskarte mit Einblendungen (Knopf „Karte“ oder Taste M)
+Game.prototype.setupMap = function() {
+  var self = this;
+  this.mapWindow = new MapWindow(document.getElementById('mapPanel'), {
+    blockMaps: this.simulation.blockMaps,
+    map: this.gameMap,
+    view: this.gameCanvas,
+    water: this.simulation.waterManager
+  });
+
+  $('#mapRequest').click(function(e) {
+    e.preventDefault();
+    self.mapWindow.toggle();
+  });
+
+  $(document).keydown(function(e) {
+    if (self.dialogOpen || $(e.target).is('input, textarea, select'))
+      return;
+    if (e.key === 'm' || e.key === 'M') {
+      self.mapWindow.toggle();
+      e.preventDefault();
+    }
+  });
+};
+
+
 Game.prototype.setupUnderground = function() {
   var self = this;
   var waterTools = ['pipe', 'pump', 'waterTower'];

@@ -1205,3 +1205,84 @@ button, input[type="submit"] {
 #airportButton { order: 17; }
 #bulldozerButton { order: 18; }
 #queryButton { order: 19; }
+
+
+/* Dorfplaner: Übersichtskarte (src/ui/mapWindow.ts) */
+#mapPanel {
+  display: none;
+  position: absolute;
+  right: 12px;
+  top: 300px;
+  width: 252px;
+  padding: 6px;
+  box-sizing: border-box;
+  border-radius: 6px;
+}
+
+#mapPanel .mapHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+#mapPanel .mapClose {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+#mapPanel .mapCanvas {
+  display: block;
+  width: 240px;
+  height: 200px;
+  image-rendering: pixelated;
+  cursor: crosshair;
+  border: 1px solid #555;
+}
+
+#mapPanel .mapOverlays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 5px;
+}
+
+#mapPanel .mapOverlays button {
+  font-size: 11px;
+  padding: 2px 5px;
+  border: 1px solid #999;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+
+#mapPanel .mapOverlays button[aria-pressed="true"] {
+  background: #2f4f4f;
+  color: #fff;
+  border-color: #2f4f4f;
+}
+
+#mapPanel .mapLegend {
+  font-size: 11px;
+  margin-top: 4px;
+  color: #333;
+}
+
+#mapPanel .mapOverlays button {
+  width: auto;
+  height: auto;
+}
+
+#mapPanel .mapClose {
+  width: 24px;
+  height: 24px;
+}
+
+#mapRequest {
+  background-color: #2a9d8f;
+  color: white;
+}

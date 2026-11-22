@@ -178,8 +178,8 @@ lauffähigen Stand, Unit-Tests für die reinen Rechenfunktionen und einem kurzen
 | **3** | Gebäudetabelle (getestet) und prozedurale Gebäude: Zonen je Ausbaustufe, Sondergebäude, Stapel-Zeichnung | Gebäude mit Höhe, richtige Überdeckung | 12 h |
 | **4** | Animationen, Blinken, Sprites, Brücken, Feuer, Trümmer | alles Sichtbare aus der Draufsicht auch isometrisch | 6 h |
 | **5** | Eingabe neu: Pointer Events, Verschieben, Zoom (3 Stufen), Drehen (4 Richtungen), Gesten, Tastatur | am PC und iPad bedienbar | 10 h |
-| **6** | Oberfläche: Menüleiste, Statuszeile, Symbolleiste mit eigenen Symbolen, Tempo-Menü | neue Bedienoberfläche | 8 h |
-| **7** | Übersichtskarte mit Einblendungen (Verschmutzung, Kriminalität, Bodenwert, Verkehr, Strom); Klick springt | Überblick über die Stadt | 6 h |
+| **6** | Oberfläche: Menüleiste, Statuszeile, Symbolleiste mit eigenen Symbolen, Tempo-Menü — Symbolleiste **erledigt 22.11.2026** (`src/ui/toolIcons.ts`), Rest offen | neue Bedienoberfläche | 8 h |
+| **7** | Übersichtskarte mit Einblendungen (Verschmutzung, Kriminalität, Bodenwert, Verkehr, Strom); Klick springt — **erledigt 22.11.2026** (`src/ui/mapWindow.ts`, zusätzlich Wasser, Bevölkerung, Feuerwehr, Polizei) | Überblick über die Stadt | 6 h |
 | **8** | Höhenkarte: Datenstruktur in `GameMap`, Kartengenerator, Speichern Version 5, alte Spielstände; Unit-Tests | Gelände mit Höhen in den Daten | 8 h |
 | **9** | Höhen zeichnen: Hangformen, Gebäude auf Höhe, Picking mit Höhe | Hügel sichtbar und anklickbar | 10 h |
 | **10** | Bauregeln am Hang, Werkzeug „Planieren“, Meldungen | spielbar mit Hügeln | 8 h |
