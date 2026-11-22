@@ -65,6 +65,9 @@ interface TrafficSource {
  */
 const LIGHT_TRAFFIC_FROM = 12;
 
+/** Alle so viele Millisekunden rücken die Autos ein kleines Stück weiter (8 Schritte je Durchlauf). */
+const CAR_STEP_MS = 220;
+
 /** Bau-Vorschau, wie sie Game.calculateMouseForPaint() liefert. */
 interface MouseBox {
     x: number;
@@ -300,7 +303,8 @@ export class IsoCanvas {
         // Kachelwerte mit Animationen (Verkehr, Rauch, Blinken …) – sie ändern sich etwa alle 50 ms
         const values = rect === null ? [] : this.animateRect(rect, map, isPaused === true);
         const sprites = this.activeSprites();
-        this.trafficTick = isPaused === true ? this.trafficTick : Math.floor(Date.now() / 250);
+        // Eigener, ruhiger Takt für fahrende Autos (unabhängig vom schnellen Animationstakt der Simulation)
+        this.trafficTick = isPaused === true ? this.trafficTick : Math.floor(Date.now() / CAR_STEP_MS);
         const signature = [this.trafficTick, this.canvasWidth, this.canvasHeight, this.tileWidth, this.rotation, this.originX,
                            this.originY, mouse ? [mouse.x, mouse.y, mouse.width, mouse.colour].join(",") : "-",
                            rect ? [rect.minX, rect.maxX, rect.minY, rect.maxY].join(",") : "-",
@@ -380,6 +384,10 @@ export class IsoCanvas {
         }
 
         const building = raw.cover === "zone" ? buildingPartOf(value) : null;
+        // Gebäude: zur Kachel-Würfelzahl kommt eine für die ganze Zone (von ihrer Ecke aus berechnet)
+        const variant = building !== null
+            ? this.variantFor(tile.x, tile.y) + 4 * this.zoneVariantFor(tile.x - building.dx, tile.y - building.dy)
+            : this.variantFor(tile.x, tile.y);
         return {
             building,
             frame: animationFrameOf(shown),
@@ -387,19 +395,24 @@ export class IsoCanvas {
             lightning,
             look,
             smoke: isSmoke(shown),
+            rotation: this.rotation,
             traffic: this.trafficFor(shown, raw.roads !== 0, tile.x, tile.y),
-            variant: this.variantFor(tile.x, tile.y),
+            variant,
         };
     }
 
     /** Verkehr: von der Simulation markiert, sonst aus der Verkehrsdichte (nur Anzeige). */
     private trafficFor(value: number, isRoad: boolean, x: number, y: number) {
         const marked = trafficOf(value);
-        if (marked.level > 0 || !isRoad || this.trafficSource === null) {
+        const frame = this.trafficTick % 8;
+        if (marked.level > 0) {
+            return { frame, level: marked.level };
+        }
+        if (!isRoad || this.trafficSource === null) {
             return marked;
         }
         const density = this.trafficSource.worldGet(x, y);
-        return density >= LIGHT_TRAFFIC_FROM ? { frame: this.trafficTick % 4, level: 1 } : marked;
+        return density >= LIGHT_TRAFFIC_FROM ? { frame, level: 1 } : marked;
     }
 
     /*
@@ -445,13 +458,18 @@ export class IsoCanvas {
             const centre = spriteCentre(sprite);
             const point = this.mapPointToViewPoint(centre.x, centre.y, map);
             const ground = projectToScreen(point.x, point.y, 0, view);
-            drawSprite(ctx, sprite, ground.x, ground.y, this.tileWidth);
+            drawSprite(ctx, sprite, ground.x, ground.y, this.tileWidth, this.rotation);
         }
     }
 
     /** Feste „Zufallszahl“ 0–3 je Kartenkachel, damit Wiesen und Wasser lebendiger aussehen – auch nach Drehen. */
     private variantFor(x: number, y: number): number {
         return ((x * 73856093) ^ (y * 19349663)) & 3;
+    }
+
+    /** Feste „Zufallszahl“ 0–15 je Zone (aus der Ecke der Zone): Bautyp und Farben der ganzen Zone. */
+    private zoneVariantFor(x: number, y: number): number {
+        return (((x * 2654435761) ^ (y * 40503)) >>> 7) & 15;
     }
 
     /*

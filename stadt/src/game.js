@@ -64,6 +64,8 @@ function Game(gameMap, tileSet, snowTileSet, spriteSheet, difficulty, name) {
 
   this.name = name || 'Mein Dorf';
   this.everClicked = false;
+  // Dorfplaner: Kennung des Spielstands, unter dem dieses Spiel gespeichert wird (null = noch nie gespeichert)
+  this.saveId = savedGame ? savedGame.saveId : null;
 
   if (savedGame)
     this.load(savedGame);
@@ -266,8 +268,9 @@ Game.prototype.setupViewControls = function() {
   var updateLabel = function() {
     var iso = this.gameCanvas.isIsometric();
     $('#viewRequest').text(iso ? 'Draufsicht' : '3D-Ansicht');
-    // Drehen und Zoomen gibt es nur in der 3D-Ansicht
-    $('#viewControls').css('display', iso ? 'flex' : 'none');
+    // Zoomen in beiden Ansichten, Drehen nur in der 3D-Ansicht
+    $('#viewControls').css('display', 'flex');
+    $('#rotateLeft, #rotateRight').css('display', iso ? '' : 'none');
   }.bind(this);
 
   // Zoomen per Knopf oder Taste: um die Bildschirmmitte
@@ -302,15 +305,13 @@ Game.prototype.setupViewControls = function() {
       return;
     }
 
-    // Drehen (Q/E) und Zoom (+/−) nur in der 3D-Ansicht
-    if (!this.gameCanvas.isIsometric())
-      return;
-
+    // Zoom (+/−) in beiden Ansichten, Drehen (Q/E) nur in der 3D-Ansicht
+    var iso = this.gameCanvas.isIsometric();
     switch (e.key) {
-      case 'q': case 'Q': rotate(-1); break;
-      case 'e': case 'E': rotate(1); break;
       case '+': case '=': zoom(1); break;
       case '-': zoom(-1); break;
+      case 'q': case 'Q': if (!iso) return; rotate(-1); break;
+      case 'e': case 'E': if (!iso) return; rotate(1); break;
       default: return;
     }
     e.preventDefault();
@@ -320,12 +321,19 @@ Game.prototype.setupViewControls = function() {
 };
 
 
-Game.prototype.save = function() {
+// Dorfplaner: speichert in den eigenen Spielstand; mit asCopy entsteht ein zusätzlicher, neuer Spielstand.
+// Rückgabe: true bei Erfolg, false wenn der Browser-Speicher voll ist.
+Game.prototype.save = function(asCopy) {
   var saveData = {name: this.name, everClicked: this.everClicked};
   BaseTool.save(saveData);
   this.simulation.save(saveData);
 
-  Storage.saveGame(saveData);
+  try {
+    this.saveId = Storage.saveGame(saveData, asCopy ? null : this.saveId);
+    return true;
+  } catch (e) {
+    return false;
+  }
 };
 
 
@@ -577,10 +585,10 @@ Game.prototype.handleTool = function(data) {
 
 
 Game.prototype.handleSave = function() {
-  this.save();
+  var ok = this.save(false);
   this.dialogOpen = true;
   this._openWindow = 'saveWindow';
-  this.saveWindow.open();
+  this.saveWindow.open(ok, this.name, this.saveId, this.save.bind(this, true));
 };
 
 

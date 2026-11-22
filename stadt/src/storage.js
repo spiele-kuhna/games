@@ -11,33 +11,137 @@
  *
  */
 
+// Dorfplaner: mehrere Spielstände statt eines einzigen. Die reinen Rechenfunktionen (Verzeichnis, Prüfen beim
+// Import, Dateiname) liegen in saveSlots.ts und haben Unit-Tests; hier passiert nur das Lesen und Schreiben im Browser.
+//
+// Spielstände liegen im localStorage dieses Browsers. Zum Mitnehmen in einen anderen Browser oder auf einen anderen
+// Rechner gibt es den Export als Datei (.json) und den Import aus einer solchen Datei.
+
 import { MiscUtils } from './miscUtils.js';
+import { INDEX_KEY, SLOT_PREFIX, entryFor, exportFileName, makeSaveId, parseIndex, removeEntry, unwrapImport,
+         upsertEntry, wrapForExport } from './saveSlots.ts';
 
-// A very thin wrapper around localStorage, in case we wish to move to some other storage mechanism
-// (such as indexedDB) in the future
+// Schlüssel des einzigen Spielstands im Original micropolisJS. Er wird beim ersten Aufruf einmalig als
+// Spielstand übernommen und bleibt selbst unverändert liegen.
+var LEGACY_KEY = 'micropolisJSGame';
+var LEGACY_DONE_KEY = 'dorfplaner.altesSpielUebernommen';
 
-var getSavedGame = function() {
-  var savedGame = window.localStorage.getItem(this.KEY);
 
-  if (savedGame !== null) {
-    savedGame = JSON.parse(savedGame);
+var readIndex = function() {
+  return parseIndex(window.localStorage.getItem(INDEX_KEY));
+};
 
-    if (savedGame.version !== this.CURRENT_VERSION)
-      this.transitionOldSave(savedGame);
 
-    // Flag as a saved game for Game/Simulation etc...
-    savedGame.isSavedGame = true;
+var writeIndex = function(index) {
+  window.localStorage.setItem(INDEX_KEY, JSON.stringify(index));
+};
+
+
+// Einmalig: altes Einzel-Spiel ins Verzeichnis übernehmen
+var adoptLegacySave = function() {
+  var storage = window.localStorage;
+  if (storage.getItem(LEGACY_DONE_KEY) !== null)
+    return;
+
+  var old = storage.getItem(LEGACY_KEY);
+  if (old !== null) {
+    try {
+      var data = JSON.parse(old);
+      storage.setItem(SLOT_PREFIX + 'alt', old);
+      writeIndex(upsertEntry(readIndex(), entryFor('alt', data, Date.now())));
+    } catch (e) {
+      // kaputter alter Spielstand: einfach nicht übernehmen
+    }
   }
+  storage.setItem(LEGACY_DONE_KEY, '1');
+};
 
+
+// Liste aller Spielstände, neueste zuerst
+var listSaves = function() {
+  if (!this.canStore)
+    return [];
+  adoptLegacySave();
+  return readIndex();
+};
+
+
+var hasSaves = function() {
+  return this.listSaves().length > 0;
+};
+
+
+// Einen Spielstand laden; null, wenn es ihn nicht (mehr) gibt
+var getSave = function(id) {
+  var text = window.localStorage.getItem(SLOT_PREFIX + id);
+  if (text === null)
+    return null;
+
+  var savedGame = JSON.parse(text);
+  if (savedGame.version !== this.CURRENT_VERSION)
+    this.transitionOldSave(savedGame);
+
+  // Flag as a saved game for Game/Simulation etc...
+  savedGame.isSavedGame = true;
+  // Dorfplaner: unter welcher Kennung weiter gespeichert wird
+  savedGame.saveId = id;
   return savedGame;
 };
 
 
-var saveGame = function(gameData) {
+// Speichern. Ohne id entsteht ein neuer Spielstand. Rückgabe: die Kennung.
+// Wirft einen Fehler, wenn der Browser-Speicher voll ist – der Aufrufer zeigt dann eine Meldung.
+var saveGame = function(gameData, id) {
+  id = id || makeSaveId(Date.now(), Math.random());
   gameData.version = this.CURRENT_VERSION;
-  gameData = JSON.stringify(gameData);
 
-  window.localStorage.setItem(this.KEY, gameData);
+  window.localStorage.setItem(SLOT_PREFIX + id, JSON.stringify(gameData));
+  writeIndex(upsertEntry(readIndex(), entryFor(id, gameData, Date.now())));
+  return id;
+};
+
+
+var deleteSave = function(id) {
+  window.localStorage.removeItem(SLOT_PREFIX + id);
+  writeIndex(removeEntry(readIndex(), id));
+};
+
+
+// Spielstand als Datei herunterladen (bleibt auf dem eigenen Rechner, nichts wird ins Internet geschickt)
+var downloadSave = function(id) {
+  var text = window.localStorage.getItem(SLOT_PREFIX + id);
+  if (text === null)
+    return;
+
+  var game = JSON.parse(text);
+  var now = new Date();
+  var blob = new Blob([wrapForExport(game, now)], {type: 'application/json'});
+  var url = URL.createObjectURL(blob);
+  var link = document.createElement('a');
+  link.href = url;
+  link.download = exportFileName(game.name, now);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+};
+
+
+// Spielstand aus dem Inhalt einer Datei übernehmen. Rückgabe: {ok: true, id} oder {ok: false, error}
+var importSave = function(text) {
+  var result = unwrapImport(text);
+  if (!result.ok)
+    return result;
+
+  var game = result.game;
+  if (game.version !== this.CURRENT_VERSION)
+    this.transitionOldSave(game);
+
+  try {
+    return {ok: true, id: this.saveGame(game)};
+  } catch (e) {
+    return {ok: false, error: 'Der Speicher dieses Browsers ist voll. Bitte alte Spielstände löschen.'};
+  }
 };
 
 
@@ -62,15 +166,27 @@ var transitionOldSave = function(savedGame) {
 
 
 var Storage = {
-  getSavedGame: getSavedGame,
+  listSaves: listSaves,
+  hasSaves: hasSaves,
+  getSave: getSave,
   saveGame: saveGame,
+  deleteSave: deleteSave,
+  downloadSave: downloadSave,
+  importSave: importSave,
   transitionOldSave: transitionOldSave
 };
 
 
+var storageAvailable = (function() {
+  try {
+    return window.localStorage !== undefined && window.localStorage !== null;
+  } catch (e) {
+    return false;   // z. B. wenn der Browser Website-Daten blockiert
+  }
+})();
+
 Object.defineProperty(Storage, 'CURRENT_VERSION', MiscUtils.makeConstantDescriptor(3));
-Object.defineProperty(Storage, 'KEY', MiscUtils.makeConstantDescriptor('micropolisJSGame'));
-Object.defineProperty(Storage, 'canStore', MiscUtils.makeConstantDescriptor(window.localStorage !== undefined));
+Object.defineProperty(Storage, 'canStore', MiscUtils.makeConstantDescriptor(storageAvailable));
 
 
 export { Storage };

@@ -80,7 +80,8 @@ GameCanvas.prototype.init = function(map, tileSet, spriteSheet, animationManager
 
   this._spriteSheet = spriteSheet;
   this._tileSet = tileSet;
-  var w = this._tileSet.tileWidth;
+  this._zoom = 1;
+  var w = this.tileSize();
   this._map = map;
   this.animationManager = new AnimationManager(map);
 
@@ -138,7 +139,7 @@ GameCanvas.prototype._calculateDimensions = function(force) {
   this._canvas.width = canvasWidth;
   this._canvas.height = canvasHeight;
 
-  var w = this._tileSet.tileWidth;
+  var w = this.tileSize();
 
   // How many tiles fit?
   this._wholeTilesInViewX = Math.floor(canvasWidth / w);
@@ -283,8 +284,8 @@ GameCanvas.prototype.canvasCoordinateToTileOffset = function(x, y) {
   if (!this.ready)
     throw new Error('Not ready!');
 
-  return {x: Math.floor(x / this._tileSet.tileWidth),
-          y: Math.floor(y / this._tileSet.tileWidth)};
+  return {x: Math.floor(x / this.tileSize()),
+          y: Math.floor(y / this.tileSize())};
 };
 
 
@@ -298,8 +299,8 @@ GameCanvas.prototype.canvasCoordinateToTileCoordinate = function(x, y) {
   if (x >= this.canvasWidth || y >= this.canvasHeight)
     return null;
 
-  return {x: this._originX + Math.floor(x/this._tileSet.tileWidth),
-          y: this._originY + Math.floor(y/this._tileSet.tileWidth)};
+  return {x: this._originX + Math.floor(x/this.tileSize()),
+          y: this._originY + Math.floor(y/this.tileSize())};
 };
 
 
@@ -313,8 +314,8 @@ GameCanvas.prototype.canvasCoordinateToPosition = function(x, y) {
   if (x >= this.canvasWidth || y >= this.canvasHeight)
     return null;
 
-  x = this._originX + Math.floor(x / this._tileSet.tileWidth);
-  y = this._originY + Math.floor(y / this._tileSet.tileWidth);
+  x = this._originX + Math.floor(x / this.tileSize());
+  y = this._originY + Math.floor(y / this.tileSize());
 
 
   if (x < 0 || x >= this._map.width || y < 0 || y >= this._map.height)
@@ -355,8 +356,8 @@ GameCanvas.prototype.tileToCanvasCoordinate = function(x, y) {
       y < this._originY || y >= this._originY + this._totalTilesInViewY)
     return null;
 
-  return {x: (x - this._originX) * this._tileSet.tileWidth,
-          y: (y - this._originY) * this._tileSet.tileWidth};
+  return {x: (x - this._originX) * this.tileSize(),
+          y: (y - this._originY) * this.tileSize()};
 };
 
 
@@ -378,13 +379,13 @@ GameCanvas.prototype._screenshot = function(onlyVisible) {
     return this._canvas.toDataURL();
 
   var tempCanvas = document.createElement('canvas');
-  tempCanvas.width = this._map.width * this._tileSet.tileWidth;
-  tempCanvas.height = this._map.height * this._tileSet.tileWidth;
+  tempCanvas.width = this._map.width * BASE_TILE;
+  tempCanvas.height = this._map.height * BASE_TILE;
   var ctx = tempCanvas.getContext('2d');
 
   for (var x = 0; x < this._map.width; x++) {
     for (var y = 0; y < this._map.height; y++) {
-      this._paintOne(ctx, this._map.getTileValue(x, y), x, y);
+      this._paintOne(ctx, this._map.getTileValue(x, y), x, y, BASE_TILE);
     }
   }
   return tempCanvas.toDataURL();
@@ -403,6 +404,37 @@ GameCanvas.prototype.screenshotVisible = function() {
 
 // Dorfplaner, 2026: Die isometrische Ansicht zeichnet auf dasselbe Canvas-Element (siehe iso/viewSwitcher.js).
 // Beim Zurückschalten muss die Draufsicht deshalb Größe und Inhalt komplett neu aufbauen.
+// Dorfplaner: Zoom in der Draufsicht. Nur ganze Vielfache von 16 Pixeln, damit die Pixelgrafik scharf bleibt.
+var BASE_TILE = 16;
+GameCanvas.ZOOM_LEVELS = [1, 2, 3];
+
+GameCanvas.prototype.tileSize = function() {
+  return BASE_TILE * (this._zoom || 1);
+};
+
+
+// Eine Zoomstufe näher (+1) oder weiter weg (−1); die Kachel unter (x, y) bleibt unter dem Mauszeiger.
+GameCanvas.prototype.zoomAt = function(step, x, y) {
+  var levels = GameCanvas.ZOOM_LEVELS;
+  var index = levels.indexOf(this._zoom || 1);
+  var next = levels[Math.max(0, Math.min(levels.length - 1, index + step))];
+  if (next === this._zoom)
+    return;
+
+  var tile = this.canvasCoordinateToTileCoordinate(x, y);
+  this._zoom = next;
+  this._calculateDimensions(true);
+  this._lastPaintedTiles = null;
+
+  if (tile !== null) {
+    var originX = tile.x - Math.floor(x / this.tileSize());
+    var originY = tile.y - Math.floor(y / this.tileSize());
+    this._originX = Math.max(this.minX, Math.min(this.maxX, originX));
+    this._originY = Math.max(this.minY, Math.min(this.maxY, originY));
+  }
+};
+
+
 GameCanvas.prototype.forceRepaint = function() {
   this._canvas.style.width = '';
   this._canvas.style.height = '';
@@ -420,7 +452,8 @@ GameCanvas.prototype.shoogle = function() {
 
 GameCanvas.prototype._processSprites = function(ctx, spriteList) {
   var spriteDamage = [];
-  var tileWidth = this._tileSet.tileWidth;
+  var tileWidth = BASE_TILE;
+  var zoom = this._zoom || 1;
 
   for (var i = 0, l = spriteList.length; i < l; i++) {
     var sprite = spriteList[i];
@@ -430,10 +463,10 @@ GameCanvas.prototype._processSprites = function(ctx, spriteList) {
                     (sprite.type - 1) * 48,
                     sprite.width,
                     sprite.width,
-                    sprite.x + sprite.xOffset - this._originX * 16,
-                    sprite.y + sprite.yOffset - this._originY * 16,
-                    sprite.width,
-                    sprite.width);
+                    (sprite.x + sprite.xOffset - this._originX * 16) * zoom,
+                    (sprite.y + sprite.yOffset - this._originY * 16) * zoom,
+                    sprite.width * zoom,
+                    sprite.width * zoom);
     } catch (e) {
       throw new Error('Failed to draw sprite ' + sprite.type + ' frame ' + sprite.frame + ' at ' + sprite.x +  ', ' + sprite.y);
     }
@@ -483,9 +516,9 @@ GameCanvas.prototype._processMouse = (function() {
       return damage;
     }
 
-    var pos = {x: mouseX * this._tileSet.tileWidth, y: mouseY * this._tileSet.tileWidth};
-    var width = mouseWidth * this._tileSet.tileWidth;
-    var height = mouseHeight * this._tileSet.tileWidth;
+    var pos = {x: mouseX * this.tileSize(), y: mouseY * this.tileSize()};
+    var width = mouseWidth * this.tileSize();
+    var height = mouseHeight * this.tileSize();
     MouseBox.draw(this._canvas, pos, width, height, options);
 
     // Return an object representing tiles that were damaged that will need redrawn
@@ -500,21 +533,23 @@ GameCanvas.prototype._processMouse = (function() {
 
 
 GameCanvas.prototype._paintVoid = function(ctx, x, y) {
-  var w = this._tileSet.tileWidth;
+  var w = this.tileSize();
   ctx.fillStyle = 'black';
   ctx.fillRect(x * w, y * w, w, w);
 };
 
 
-GameCanvas.prototype._paintOne = function(ctx, tileVal, x, y) {
+GameCanvas.prototype._paintOne = function(ctx, tileVal, x, y, size) {
   if (tileVal === TILE_INVALID) {
     this._paintVoid(ctx, x, y);
     return;
   }
 
+  // Dorfplaner: Kachelgröße hängt vom Zoom ab (16, 32 oder 48 Pixel)
+  size = size || this.tileSize();
   var src = this._tileSet[tileVal];
   try {
-    ctx.drawImage(src, x * this._tileSet.tileWidth, y * this._tileSet.tileWidth);
+    ctx.drawImage(src, x * size, y * size, size, size);
   } catch (e) {
     var mapX = this._originX + x;
     var mapY = this._originY + y;
@@ -599,6 +634,7 @@ GameCanvas.prototype.paint = function(mouse, sprites, isPaused) {
     throw new Error('Not ready!');
 
   var ctx = this._canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;   // Dorfplaner: Pixelgrafik beim Zoomen scharf lassen
   var lastPaintedTiles = this._lastPaintedTiles;
 
   // Recompute our dimensions if there has been a resize since last paint

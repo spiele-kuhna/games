@@ -19,6 +19,8 @@ import { MapGenerator } from './mapGenerator.js';
 import { Simulation } from './simulation.js';
 import { SplashCanvas } from './splashCanvas.js';
 import { Storage } from './storage.js';
+import { Text } from './text.js';
+import { gameDate } from './saveSlots.ts';
 
 /*
  *
@@ -61,12 +63,12 @@ function SplashScreen(tileSet, snowTileSet, spriteSheet) {
   $('#splashLoad').click(handleLoad.bind(this));
 
   // Conditionally enable load/save buttons
+  // Dorfplaner: „Spiel laden“ ist immer möglich, wenn der Browser speichern darf – auch ohne Spielstand,
+  // denn im Lade-Dialog kann man einen Spielstand aus einer Datei übernehmen.
   $('#saveRequest').prop('disabled', !Storage.canStore);
-  $('#splashLoad').prop('disabled', !(Storage.canStore && Storage.getSavedGame() !== null));
-
-  // Dorfplaner: erklären, warum „Spiel laden“ gesperrt ist (Spielstände liegen nur in diesem Browser)
-  if ($('#splashLoad').prop('disabled'))
-    $('#splashLoad').attr('title', 'In diesem Browser ist noch kein Spiel gespeichert. Im Spiel: Knopf „Speichern“.');
+  $('#splashLoad').prop('disabled', !Storage.canStore);
+  if (!Storage.canStore)
+    $('#splashLoad').attr('title', 'Dieser Browser erlaubt der Seite nicht, Daten zu speichern.');
 
   // Paint the minimap
   this.splashCanvas = new SplashCanvas('splashContainer', tileSet);
@@ -87,25 +89,108 @@ var regenerateMap = function(e) {
 };
 
 
-// Fetches game data from the storage manager, and launches the game. We won't return from here
+// Dorfplaner: „Spiel laden“ öffnet eine Liste aller Spielstände (statt sofort den einzigen zu laden)
 var handleLoad = function(e) {
   e.preventDefault();
 
-  var savedGame = Storage.getSavedGame();
+  $('#splash').hide();
+  $('#loadPanel').show();
+  $('#loadError').text('');
+  renderLoadList.call(this);
 
-  if (savedGame === null)
+  $('#loadBack').off('click').on('click', function() {
+    $('#loadPanel').hide();
+    $('#splash').show();
+  });
+
+  // „Aus Datei laden“: unsichtbares Dateifeld öffnen; die Datei wird nur im Browser gelesen, nicht hochgeladen
+  $('#loadImport').off('click').on('click', function() {
+    $('#loadFile').val('').trigger('click');
+  });
+  $('#loadFile').off('change').on('change', importFromFile.bind(this));
+};
+
+
+var importFromFile = function(e) {
+  var file = e.target.files && e.target.files[0];
+  if (!file)
     return;
+
+  var self = this;
+  var reader = new FileReader();
+  reader.onload = function() {
+    var result = Storage.importSave(String(reader.result));
+    $('#loadError').text(result.ok ? '' : result.error);
+    renderLoadList.call(self);
+  };
+  reader.onerror = function() {
+    $('#loadError').text('Die Datei konnte nicht gelesen werden.');
+  };
+  reader.readAsText(file);
+};
+
+
+// Eine Zeile je Spielstand: Name, Spieldatum, Einwohner, gespeichert am – und die Knöpfe dazu
+var renderLoadList = function() {
+  var self = this;
+  var saves = Storage.listSaves();
+  var list = $('#loadList').empty();
+  $('#loadEmpty').toggle(saves.length === 0);
+
+  saves.forEach(function(entry) {
+    var date = gameDate(entry.cityTime);
+    var savedAt = new Date(entry.savedAt);
+    var meta = Text.months[date.month] + ' ' + date.year + ' · ' + entry.population.toLocaleString('de-DE') +
+               ' Einwohner · gespeichert am ' + savedAt.toLocaleDateString('de-DE') + ' um ' +
+               savedAt.toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'}) + ' Uhr';
+
+    // Namen nur als Text einsetzen (nie als HTML), denn sie können aus einer fremden Datei stammen
+    var info = $('<div class="saveInfo"></div>')
+      .append($('<div class="saveName"></div>').text(entry.name))
+      .append($('<div class="saveMeta"></div>').text(meta));
+
+    var load = $('<button>Laden</button>').on('click', function() { launchSaved.call(self, entry.id); });
+    var file = $('<button title="Als Datei auf diesem Rechner speichern">Datei</button>')
+      .on('click', function() { Storage.downloadSave(entry.id); });
+    var remove = $('<button>Löschen</button>').on('click', function() {
+      if (window.confirm('Spielstand „' + entry.name + '“ wirklich löschen? Das lässt sich nicht rückgängig machen.')) {
+        Storage.deleteSave(entry.id);
+        renderLoadList.call(self);
+      }
+    });
+
+    list.append($('<li></li>').append(info, load, file, remove));
+  });
+};
+
+
+// Spielstand laden und das Spiel starten. We won't return from here
+var launchSaved = function(id) {
+  var savedGame;
+  try {
+    savedGame = Storage.getSave(id);
+  } catch (err) {
+    savedGame = null;
+  }
+
+  if (savedGame === null) {
+    $('#loadError').text('Dieser Spielstand ist beschädigt oder nicht mehr vorhanden.');
+    renderLoadList.call(this);
+    return;
+  }
 
   // Remove installed event listeners
   $('#splashLoad').off('click');
   $('#splashGenerate').off('click');
   $('#splashPlay').off('click');
+  $('#loadBack, #loadImport').off('click');
+  $('#loadFile').off('change');
 
-  // Hide the splashscreen UI
-  $('#splash').toggle();
+  // Hide the load panel
+  $('#loadPanel').hide();
 
   // Launch
-  var g = new Game(savedGame, this.tileSet, this.snowTileSet, this.spriteSheet, Simulation.LEVEL_EASY, name);
+  var g = new Game(savedGame, this.tileSet, this.snowTileSet, this.spriteSheet, Simulation.LEVEL_EASY);
 };
 
 

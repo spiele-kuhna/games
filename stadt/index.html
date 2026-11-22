@@ -56,6 +56,19 @@
             </div>
           </div>
         </div>
+        <div id="loadPanel" class="mintcream open shadow padding10 centred">
+          <h2 class="chunk alignCenter">Spiel laden</h2>
+          <p id="loadEmpty" class="alignCenter">In diesem Browser ist noch kein Spiel gespeichert.</p>
+          <ul id="loadList"></ul>
+          <p id="loadError" class="alignCenter" role="alert"></p>
+          <div class="alignCenter">
+            <button id="loadImport" class="splashButton">Aus Datei laden …</button>
+            <button id="loadBack" class="splashButton">Zurück</button>
+            <input id="loadFile" type="file" accept=".json,application/json" hidden>
+          </div>
+          <p class="loadHint">Spielstände liegen nur in diesem Browser. Mit „Datei“ speicherst du einen Spielstand
+            auf deinem Rechner und kannst ihn in einem anderen Browser über „Aus Datei laden“ weiterspielen.</p>
+        </div>
         <div id="start" class="mintcream open shadow padding10 centred">
           <h2 class="chunk alignCenter">Neues Spiel</h2>
           <form id="playForm">
@@ -385,7 +398,11 @@
           Speichern
         </header>
         <div id="saveContainer" class="alignCenter padding10 open">
-          Spiel gespeichert!
+          <span id="saveMessage">Spiel gespeichert!</span>
+          <div class="margin10">
+            <button id="saveDownload" type="button">Als Datei herunterladen</button>
+            <button id="saveCopy" type="button">Als Kopie speichern</button>
+          </div>
           <form id="saveForm" class="alignCenter margin10">
             <input type="submit" id="saveOK" class="dialogOK" value="OK">
           </form>

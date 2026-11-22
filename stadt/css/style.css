@@ -1064,3 +1064,58 @@ main {
 button, input[type="submit"] {
   touch-action: manipulation;
 }
+
+
+/* Dorfplaner: Spielstände laden */
+#loadPanel {
+  display: none;
+  position: absolute;
+  width: 560px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+#loadList {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+}
+
+#loadList li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px;
+  border-bottom: 1px solid #ccc;
+}
+
+#loadList .saveInfo {
+  flex: 1 1 260px;
+  text-align: left;
+}
+
+#loadList .saveName {
+  font-weight: bold;
+}
+
+#loadList .saveMeta {
+  font-size: 0.85em;
+  color: #444;
+}
+
+#loadError {
+  color: #b00000;
+  min-height: 1em;
+}
+
+#loadPanel .loadHint {
+  font-size: 0.85em;
+  color: #444;
+}
+
+#saveContainer button {
+  margin: 4px;
+}

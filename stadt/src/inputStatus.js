@@ -207,6 +207,10 @@ InputStatus.prototype.setView = function(view) {
     },
     zoomAt: function(step, x, y) {
       self._view.zoomAt(step, x, y);
+    },
+    dropTool: function() {
+      self.clearTool();
+      $(toolOutputID).html('Werkzeuge');
     }
   });
 };
@@ -229,7 +233,7 @@ InputStatus.prototype.clearTool = function() {
   this.currentTool = null;
   this.toolWidth = 0;
   this.toolColour = '';
-  $('.selected').removeClass('selected');
+  $('.selected').removeClass('selected').addClass('unselected');
 };
 
 

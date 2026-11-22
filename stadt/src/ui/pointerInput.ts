@@ -46,6 +46,8 @@ export interface PointerCallbacks {
     panBy(dx: number, dy: number): void;
     /** Zoomstufe ändern (+1 näher, −1 weiter weg) um den Punkt (x, y). */
     zoomAt(step: number, x: number, y: number): void;
+    /** Rechtsklick ohne Ziehen: gewähltes Werkzeug ablegen. */
+    dropTool(): void;
 }
 
 /** Was die aktuelle Berührung bzw. der Mausklick bedeutet. */
@@ -55,6 +57,7 @@ type Mode =
     "click" |          // Maus mit Werkzeug, das nicht gezogen wird: baut beim Loslassen
     "build" |          // Bauen beim Ziehen (Straße, Schiene, Leitung)
     "pan" |            // Karte verschieben
+    "rightClick" |     // rechte Maustaste unten: Klick legt das Werkzeug ab, Ziehen verschiebt
     "pinch" |          // zwei Finger
     "finished";        // Geste ist erledigt (z. B. nach langem Drücken), bis alle Finger weg sind
 
@@ -109,7 +112,11 @@ export class PointerInput {
             return;
         }
 
-        // Rechte oder mittlere Maustaste: immer verschieben
+        // Rechte Maustaste: Klick legt das Werkzeug ab, Ziehen verschiebt. Mittlere Taste: verschieben.
+        if (e.pointerType === "mouse" && e.button === 2) {
+            this.mode = "rightClick";
+            return;
+        }
         if (e.pointerType === "mouse" && e.button !== 0) {
             this.mode = "pan";
             return;
@@ -168,6 +175,13 @@ export class PointerInput {
                 this.callbacks.panBy(dx, dy);
                 return;
 
+            case "rightClick":
+                if (!isTap(pointer.startX, pointer.startY, p.x, p.y)) {
+                    this.mode = "pan";
+                    this.callbacks.panBy(p.x - pointer.startX, p.y - pointer.startY);
+                }
+                return;
+
             case "pendingTap":
                 if (isTap(pointer.startX, pointer.startY, p.x, p.y)) {
                     this.callbacks.hover(p.x, p.y);
@@ -205,7 +219,10 @@ export class PointerInput {
         }
 
         if (completed) {
-            if (this.mode === "click") {
+            if (this.mode === "rightClick") {
+                this.callbacks.dropTool();
+                this.callbacks.hover(null, null);
+            } else if (this.mode === "click") {
                 this.callbacks.useToolAt(pointer.x, pointer.y);
             } else if (this.mode === "pendingTap" && this.callbacks.hasTool()) {
                 // Antippen: dort bauen, wo der Finger aufgesetzt hat

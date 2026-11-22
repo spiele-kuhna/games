@@ -24,6 +24,36 @@ const MONSTER = 5;
 const TORNADO = 6;
 const EXPLOSION = 7;
 
+/*
+ * Fahrtrichtung aus der Bildnummer (frame), wie sie die Simulation speichert:
+ *  - Zug (trainSprite.js): 1 = Nord-Süd, 2 = Ost-West, 3 = Diagonale NW–SO, 4 = Diagonale NO–SW, 5 = unter Wasser
+ *  - Flugzeug/Hubschrauber (airplaneSprite.js): 1–8 = N, NO, O, SO, S, SW, W, NW; 9–11 = Start nach Osten
+ * Angaben in Kartenrichtungen (x nach rechts, y nach unten).
+ */
+const TRAIN_AXIS: Array<[number, number]> = [[0, 1], [0, 1], [1, 0], [1, 1], [1, -1], [0, 0]];
+const FLIGHT_HEADING: Array<[number, number]> = [[0, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0],
+                                                  [-1, -1], [1, 0], [1, 0], [1, 0]];
+
+/** Richtung von Karten- in Ansichtskoordinaten drehen (wie projection.mapToView, nur ohne Verschiebung). */
+function rotateDirection(dx: number, dy: number, rotation: number): [number, number] {
+    switch (rotation) {
+        case 1: return [-dy, dx];
+        case 2: return [-dx, -dy];
+        case 3: return [dy, -dx];
+        default: return [dx, dy];
+    }
+}
+
+/*
+ * Kontext so umstellen, dass man in Ansichts-Kachelkoordinaten (u, v) zeichnen kann, flach auf dem Boden
+ * bzw. in der Höhe lift. Danach ist (0, 0) der Punkt (x, y − lift), eine Einheit eine Kachel.
+ */
+function enterGroundPlane(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, lift: number): void {
+    ctx.save();
+    ctx.translate(x, y - lift);
+    ctx.transform(w / 2, w / 4, -w / 2, w / 4, 0, 0);
+}
+
 /** Was wir von einem Sprite der Simulation brauchen (baseSprite.js). */
 export interface SpriteLike {
     readonly type: number;
@@ -90,11 +120,56 @@ function ellipse(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number
     ctx.fill();
 }
 
+/** Flugzeug flach in der Flughöhe, Nase in Flugrichtung (Winkel in Ansichts-Kachelkoordinaten). */
+function drawPlane(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, lift: number, angle: number): void {
+    enterGroundPlane(ctx, x, y, w, lift);
+    ctx.rotate(angle);
+    // Rumpf, Tragflächen, Leitwerk – Länge etwa 1,2 Kacheln
+    fillPolygon(ctx, [{ x: 0.62, y: 0 }, { x: 0.5, y: -0.07 }, { x: -0.55, y: -0.07 }, { x: -0.62, y: 0 },
+                      { x: -0.55, y: 0.07 }, { x: 0.5, y: 0.07 }], "#f7f7f7");
+    fillPolygon(ctx, [{ x: 0.15, y: -0.06 }, { x: -0.12, y: -0.6 }, { x: -0.25, y: -0.6 }, { x: -0.08, y: -0.06 },
+                      { x: -0.08, y: 0.06 }, { x: -0.25, y: 0.6 }, { x: -0.12, y: 0.6 }, { x: 0.15, y: 0.06 }], "#dcdcdc");
+    fillPolygon(ctx, [{ x: -0.45, y: -0.05 }, { x: -0.58, y: -0.25 }, { x: -0.64, y: -0.25 }, { x: -0.58, y: 0 },
+                      { x: -0.64, y: 0.25 }, { x: -0.58, y: 0.25 }, { x: -0.45, y: 0.05 }], "#2c7fb8");
+    fillPolygon(ctx, [{ x: 0.5, y: -0.05 }, { x: 0.6, y: 0 }, { x: 0.5, y: 0.05 }], "#2c7fb8");
+    ctx.restore();
+}
+
+/** Zug in Richtung der Schiene: zwei Wagen hintereinander, flach gezeichnet mit Dach und Seitenwand. */
+function drawOrientedTrain(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, du: number, dv: number): void {
+    const length = Math.sqrt(du * du + dv * dv) || 1;
+    const ax = du / length;
+    const ay = dv / length;
+    const height = w * 0.11;
+    for (const offset of [-0.22, 0.22]) {
+        // Wagenkasten: Boden-Rechteck entlang der Achse, Dach um height nach oben versetzt
+        const cu = ax * offset;
+        const cv = ay * offset;
+        const corners = [[0.2, 0.09], [0.2, -0.09], [-0.2, -0.09], [-0.2, 0.09]].map(([a, b]) => ({
+            u: cu + ax * a - ay * b,
+            v: cv + ay * a + ax * b,
+        }));
+        const toScreen = (u: number, v: number, z: number) => ({ x: x + (u - v) * w / 2, y: y + (u + v) * w / 4 - z });
+        const bottom = corners.map((c) => toScreen(c.u, c.v, 0));
+        const top = corners.map((c) => toScreen(c.u, c.v, height));
+        // Seitenwände: die beiden, die nach vorn (zum Betrachter) zeigen
+        for (let i = 0; i < 4; i++) {
+            const j = (i + 1) % 4;
+            const facesViewer = (bottom[i].y + bottom[j].y) / 2 >= (bottom[0].y + bottom[2].y) / 2;
+            if (facesViewer) {
+                fillPolygon(ctx, [bottom[i], bottom[j], top[j], top[i]], i % 2 === 0 ? "#7a2723" : "#a5352f");
+            }
+        }
+        fillPolygon(ctx, top, "#5c5c5c");
+    }
+}
+
 /**
  * Zeichnet ein Sprite. (x, y) ist der Punkt auf dem Boden unter dem Sprite (Bildschirmpixel),
  * w die Rautenbreite der Zoomstufe.
  */
-export function drawSprite(ctx: CanvasRenderingContext2D, sprite: SpriteLike, x: number, y: number, w: number): void {
+export function drawSprite(ctx: CanvasRenderingContext2D, sprite: SpriteLike, x: number, y: number, w: number,
+                           rotation = 0): void {
     const lift = flightHeight(sprite.type) * w;
     if (lift > 0) {
         // Schatten auf dem Boden, damit man sieht, wo das Fluggerät gerade ist
@@ -102,9 +177,15 @@ export function drawSprite(ctx: CanvasRenderingContext2D, sprite: SpriteLike, x:
     }
 
     switch (sprite.type) {
-        case TRAIN:
-            box(ctx, x, y, w, 0.32, 0.14, 0, w * 0.12, "#8e2f2a", "#5c5c5c");
+        case TRAIN: {
+            if (sprite.frame === 5) {
+                break;   // unter Wasser (Tunnel): nicht sichtbar
+            }
+            const axis = TRAIN_AXIS[sprite.frame] || [1, 0];
+            const [du, dv] = rotateDirection(axis[0], axis[1], rotation);
+            drawOrientedTrain(ctx, x, y, w, du, dv);
             break;
+        }
 
         case SHIP:
             box(ctx, x, y, w, 0.42, 0.18, 0, w * 0.06, "#3c4650", "#59636d");
@@ -112,15 +193,9 @@ export function drawSprite(ctx: CanvasRenderingContext2D, sprite: SpriteLike, x:
             break;
 
         case AIRPLANE: {
-            // groß genug, dass man es auch bei kleiner Zoomstufe sieht
-            const c = { x, y: y - lift };
-            const s = w * 1.7;
-            ellipse(ctx, c.x, c.y, s * 0.22, s * 0.055, "#f7f7f7");
-            fillPolygon(ctx, [{ x: c.x - s * 0.03, y: c.y - s * 0.2 }, { x: c.x + s * 0.07, y: c.y },
-                              { x: c.x - s * 0.03, y: c.y + s * 0.2 }, { x: c.x - s * 0.08, y: c.y }], "#dedede");
-            fillPolygon(ctx, [{ x: c.x - s * 0.19, y: c.y }, { x: c.x - s * 0.23, y: c.y - s * 0.09 },
-                              { x: c.x - s * 0.15, y: c.y }], "#2c7fb8");
-            ellipse(ctx, c.x + s * 0.17, c.y, s * 0.035, s * 0.025, "#2c7fb8");
+            const heading = FLIGHT_HEADING[sprite.frame] || [1, 0];
+            const [du, dv] = rotateDirection(heading[0], heading[1], rotation);
+            drawPlane(ctx, x, y, w, lift, Math.atan2(dv, du));
             break;
         }
 
@@ -131,7 +206,7 @@ export function drawSprite(ctx: CanvasRenderingContext2D, sprite: SpriteLike, x:
                               { x: c.x + w * 0.1, y: c.y + w * 0.03 }], "#c98a2b");   // Heckausleger
             ellipse(ctx, c.x - w * 0.05, c.y - w * 0.01, w * 0.05, w * 0.04, "#9fc6e8");
             // Rotor dreht sich mit dem Animationsbild
-            const angle = sprite.frame * Math.PI / 4;
+            const angle = (Date.now() / 60) % (Math.PI * 2);   // Rotor dreht sich gleichmäßig
             ctx.strokeStyle = "#333";
             ctx.lineWidth = Math.max(1, w / 48);
             ctx.beginPath();

@@ -202,9 +202,23 @@ Diese Karten werden **nur gelesen**, wenn wir später eine Übersichtskarte mit 
 
 ### 3.5 Speichern
 
-`storage.js` legt den Spielstand als JSON in `localStorage` unter dem Schlüssel `micropolisJSGame` ab (Version 3).
-`GameMap.save()` schreibt jede Kachel als `{value: <16-Bit-Zahl>}`. Ältere Versionen werden beim Laden über
-`transitionOldSave()` angehoben – an dieser Stelle hängen wir später die Höhenkarte an (Version 4).
+Im Original legt `storage.js` genau einen Spielstand als JSON in `localStorage` unter dem Schlüssel
+`micropolisJSGame` ab (Version 3). `GameMap.save()` schreibt jede Kachel als `{value: <16-Bit-Zahl>}`. Ältere
+Versionen werden beim Laden über `transitionOldSave()` angehoben – an dieser Stelle hängen wir später die Höhenkarte
+an (Version 4).
+
+**Dorfplaner: mehrere Spielstände.** Der Inhalt eines Spielstands bleibt unverändert; neu ist nur die Ablage:
+
+| Schlüssel | Inhalt |
+|---|---|
+| `dorfplaner.saves` | Verzeichnis: Kennung, Name, Spielzeit, Einwohner, gespeichert am – ohne Karte |
+| `dorfplaner.save.<id>` | ein vollständiger Spielstand (rund 160 KB, der Browser erlaubt meist etwa 5 MB) |
+| `micropolisJSGame` | alter Einzel-Spielstand; wird einmalig als Spielstand „alt“ übernommen und bleibt liegen |
+
+Die reinen Rechenfunktionen (Verzeichnis pflegen, Datei prüfen, Dateiname) stehen in `saveSlots.ts` und haben
+Unit-Tests. Der Export als Datei verpackt den Spielstand in `{format: "dorfplaner-spielstand", formatVersion: 1,
+game: …}`; der Import prüft Aufbau, Kartengröße und Version, bevor etwas gespeichert wird. Die Datei wird nur im
+Browser gelesen bzw. erzeugt – es geht nichts an einen Server.
 
 ## 4. Ablauf eines Simulationsschritts
 

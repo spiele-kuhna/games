@@ -113,7 +113,7 @@ ViewSwitcher.prototype.scrollBy = function(dx, dy) {
 
   this._restX = (this._restX || 0) + dx;
   this._restY = (this._restY || 0) + dy;
-  var tile = 16;
+  var tile = this._top.tileSize();
   while (this._restX >= tile) { this._top.moveWest(); this._restX -= tile; }
   while (this._restX <= -tile) { this._top.moveEast(); this._restX += tile; }
   while (this._restY >= tile) { this._top.moveNorth(); this._restY -= tile; }
@@ -121,10 +121,9 @@ ViewSwitcher.prototype.scrollBy = function(dx, dy) {
 };
 
 
-// Zoomen gibt es nur in der 3D-Ansicht (die Draufsicht hat eine feste Kachelgröße)
+// Zoomen in beiden Ansichten (Draufsicht in den Stufen 1×, 2×, 3×)
 ViewSwitcher.prototype.zoomAt = function(step, x, y) {
-  if (this._active === this._iso)
-    this._iso.zoomAt(step, x, y);
+  this._active.zoomAt(step, x, y);
 };
 
 

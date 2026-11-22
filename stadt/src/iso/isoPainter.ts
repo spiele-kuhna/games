@@ -83,8 +83,10 @@ export interface PaintRequest {
     readonly look: TileLook;
     /** Bei Wasserkacheln: Richtungen (Ansicht), in denen Land angrenzt → dort Sandstrand. */
     readonly landSides: number;
-    /** 0–3, damit nicht jede Wiese gleich aussieht. */
+    /** 0–3, damit nicht jede Wiese gleich aussieht; bei Gebäuden zusätzlich die Zonen-Würfelzahl (siehe isoBuildings.ts). */
     readonly variant: number;
+    /** Drehung der Ansicht (0–3) – Gebäude über mehrere Kacheln werden damit richtig ausgerichtet */
+    readonly rotation: number;
     /** Gebäudeteil auf dieser Kachel (aus buildingTable.ts) oder null */
     readonly building: BuildingPart | null;
     /** Verkehr auf der Straße (Stärke und Animationsbild) */
@@ -144,7 +146,8 @@ export class IsoTilePainter {
         const b = request.building;
         const key = [look.ground, look.cover, look.zone, look.roads, look.rails, look.wires, look.bridge,
                      request.landSides, request.variant,
-                     b ? [b.zone, b.size, b.dx, b.dy, b.level, b.value].join(",") : "-",
+                     b || look.zone === "park" ? [b ? [b.zone, b.size, b.dx, b.dy, b.level, b.value].join(",") : "park",
+                                                  request.rotation].join(",") : "-",
                      request.traffic.level, request.traffic.frame, request.frame, request.smoke,
                      request.lightning].join("|");
         let image = this.cache[key];
@@ -175,7 +178,7 @@ export class IsoTilePainter {
         const look = request.look;
         this.drawGround(ctx, request);
         if (look.cover === "zone") {
-            this.drawZone(ctx, look.zone, request.building, request.frame, request.variant);
+            this.drawZone(ctx, look.zone, request.building, request.frame, request.variant, request.rotation);
         } else {
             this.drawCover(ctx, look, request.variant, request.frame);
         }
@@ -197,16 +200,17 @@ export class IsoTilePainter {
      * Brunnen im Park stehen nicht in der Gebäudetabelle, werden aber genauso gezeichnet.
      */
     private drawZone(ctx: CanvasRenderingContext2D, zone: ZoneType | null, building: BuildingPart | null,
-                     frame: number, variant: number): void {
+                     frame: number, variant: number, rotation: number): void {
         if (zone === "park") {
-            drawBuildingPart(ctx, this, { dx: 0, dy: 0, level: 0, size: 1, value: 0, zone: "park" }, frame, variant);
+            drawBuildingPart(ctx, this, { dx: 0, dy: 0, level: 0, size: 1, value: 0, zone: "park" }, frame, variant,
+                             rotation);
             return;
         }
         if (building === null || building.level < 0) {
             this.drawZonePlaceholder(ctx, zone);
             return;
         }
-        drawBuildingPart(ctx, this, building, frame, variant);
+        drawBuildingPart(ctx, this, building, frame, variant, rotation);
     }
 
     /*
@@ -220,7 +224,8 @@ export class IsoTilePainter {
         this.forEachDirection(mask, (direction) => {
             for (let i = 0; i < perArm; i++) {
                 // Position entlang des Arms: 0 = Kachelrand, 0.5 = Mitte
-                const along = ((traffic.frame * 0.12 + i * 0.25 + direction * 0.07) % 0.42) + 0.04;
+                // 8 kleine Schritte je Durchlauf: ruhige Fahrt
+                const along = ((traffic.frame * 0.055 + i * 0.25 + direction * 0.07) % 0.42) + 0.04;
                 const lane = i % 2 === 0 ? 0.42 : 0.54;   // rechte bzw. linke Fahrspur
                 const length = 0.12;
                 const width = 0.07;
