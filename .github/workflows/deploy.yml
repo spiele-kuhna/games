@@ -41,11 +41,17 @@ jobs:
         working-directory: stadt
         run: npm run build
 
+      # Die Startseite geht erst mit, wenn Impressum und Datenschutz verlinkt sind (keine [OFFEN]-Platzhalter).
+      # Die Spiele selbst werden unabhängig davon veröffentlicht.
       - name: Website zusammenstellen
         run: |
           mkdir -p site/stadt
           cp -r stadt/dist/. site/stadt/
-          cp portal/index.html site/index.html
+          if grep -q "\[OFFEN" portal/index.html; then
+            echo "::notice::Startseite enthält noch [OFFEN]-Platzhalter und wird nicht veröffentlicht."
+          else
+            cp portal/index.html site/index.html
+          fi
           find site -maxdepth 2 | sort
 
       # Offene Platzhalter dürfen nie live gehen.
@@ -70,4 +76,12 @@ jobs:
           HOST=$(printf '%s' "$SFTP_HOST" | tr -d '[:space:]'); HOST=${HOST#sftp://}
           NUTZER=$(printf '%s' "$SFTP_USER" | tr -d '[:space:]')
           echo "Host gesetzt: ${#HOST} Zeichen, Benutzer: ${#NUTZER} Zeichen, Passwort: ${#LFTP_PASSWORD} Zeichen"
+          # Sicherung: Der SFTP-Benutzer muss auf den Spiele-Ordner beschränkt sein. Sieht er die Wurzel des
+          # Webspace (dort liegen u. a. clickandbuilds/ mit den Firmenwebseiten), wird nichts hochgeladen.
+          WURZEL=$(lftp -u "$NUTZER" --env-password "sftp://$HOST" -e "set sftp:auto-confirm yes; set net:max-retries 2; set net:timeout 20; cls -1; bye")
+          echo "Ordner im Ziel:"; echo "$WURZEL" | sed 's/^/  /'
+          if echo "$WURZEL" | grep -qiE "clickandbuilds|_ProviderRestore|jobs-dir"; then
+            echo "::error::Der SFTP-Benutzer sieht die Webspace-Wurzel. Bitte einen Benutzer nur für /spiele anlegen – Upload abgebrochen."
+            exit 1
+          fi
           lftp -u "$NUTZER" --env-password "sftp://$HOST" -e "set cmd:fail-exit yes; set sftp:auto-confirm yes; set net:max-retries 2; set net:timeout 20; pwd; mirror -R --parallel=4 --verbose=1 site/ ./; cls -1; bye"

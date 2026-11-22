@@ -38,6 +38,7 @@ Jeder Push auf `main` baut die Spiele (GitHub Actions, `.github/workflows/deploy
 Webspace von `spiele.kuhna.cloud`. Dateien auf dem Server werden dabei nie gelöscht.
 
 - Benötigte Repo-Secrets: `SFTP_HOST`, `SFTP_USER`, `SFTP_PASS` (Werte nur in den GitHub-Einstellungen, nie im Repo).
-- Der SFTP-Benutzer sollte nur auf den Ordner der Subdomain zugreifen dürfen; dessen Wurzel entspricht
-  `https://spiele.kuhna.cloud/`.
-- Offene Platzhalter `[OFFEN: …]` im Build stoppen die Veröffentlichung.
+- Der SFTP-Benutzer darf nur den Ordner der Subdomain (`/spiele` im Webspace) sehen; dessen Wurzel entspricht
+  `https://spiele.kuhna.cloud/`. Sieht der Benutzer die Webspace-Wurzel, bricht der Upload ab.
+- Die Startseite (`portal/`) wird erst veröffentlicht, wenn sie keine `[OFFEN: …]`-Platzhalter mehr enthält;
+  die Spiele selbst gehen unabhängig davon online.
