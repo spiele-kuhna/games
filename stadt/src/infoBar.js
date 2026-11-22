@@ -28,7 +28,8 @@ var InfoBar = function(classification, population, score, funds, date, name) {
   var nameSelector = MiscUtils.normaliseDOMid(name);
 
   return function(dataSource, initialValues) {
-    $(classificationSelector).text(initialValues.classification);
+    // Dorfplaner: interne Kennung (z. B. 'VILLAGE') als deutschen Text anzeigen
+    $(classificationSelector).text(Text.cityClass[initialValues.classification] || initialValues.classification);
     $(populationSelector).text(initialValues.population);
     $(scoreSelector).text(initialValues.score);
     $(fundsSelector).text(initialValues.funds);
@@ -37,7 +38,7 @@ var InfoBar = function(classification, population, score, funds, date, name) {
 
     // Add the various listeners
     dataSource.addEventListener(Messages.CLASSIFICATION_UPDATED, function(classification) {
-      $(classificationSelector).text(classification);
+      $(classificationSelector).text(Text.cityClass[classification] || classification);
     });
 
     dataSource.addEventListener(Messages.POPULATION_UPDATED, function(population) {

@@ -51,7 +51,7 @@ var onAllTilesLoaded = function() {
 // XXX Replace with an error dialog
 var onFallbackError = function() {
   fallbackImage.onload = fallbackImage.onerror = null;
-  alert('Failed to load tileset!');
+  alert('Die Kachelbilder konnten nicht geladen werden!');
 };
 
 

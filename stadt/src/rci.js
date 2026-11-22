@@ -101,7 +101,7 @@ RCI.prototype._drawValue = function(ctx, index, value) {
 
 
 RCI.prototype._drawLabel = function(ctx, index) {
-  var labels = ['R', 'C', 'I'];
+  var labels = ['W', 'G', 'I']; // Dorfplaner: Wohnen, Gewerbe, Industrie
   var textLeft = 2 * this._padding + (index * 2 * this._padding) +
                  Math.floor(this._padding/2);
 

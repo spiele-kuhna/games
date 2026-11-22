@@ -36,7 +36,7 @@ var budgetOKID = '#budgetOK';
 var setSpendRangeText = function(element, percentage, totalSpend) {
   var labelID = element + 'Label';
   var cash = Math.floor(totalSpend * (percentage / 100));
-  var text = [percentage, '% of $', totalSpend, ' = $', cash].join('');
+  var text = [percentage, ' % von ', totalSpend, ' $ = ', cash, ' $'].join('');
   $(MiscUtils.normaliseDOMid(labelID)).text(text);
 };
 
@@ -52,7 +52,7 @@ var onFundingUpdate = function(elementID, e) {
 var onTaxUpdate = function(e) {
   var elem = $('#taxRateLabel')[0];
   var sourceElem = $('#taxRate')[0];
-  $(elem).text(['Tax rate: ', sourceElem.value, '%'].join(''));
+  $(elem).text(['Steuersatz: ', sourceElem.value, ' %'].join(''));
 };
 
 
@@ -142,10 +142,10 @@ BudgetWindow.prototype.open = function(budgetData) {
 
   var cashFlow = taxesCollected - this.roadMaintenanceBudget - this.fireMaintenanceBudget - this.policeMaintenanceBudget;
   var currentFunds = previousFunds + cashFlow;
-  $('#taxesCollected').text('$' + taxesCollected);
-  $('#cashFlow').text((cashFlow < 0 ? '-$' : '$') + cashFlow);
-  $('#previousFunds').text((previousFunds < 0 ? '-$' : '$') + previousFunds);
-  $('#currentFunds').text('$' + currentFunds);
+  $('#taxesCollected').text(taxesCollected + ' $');
+  $('#cashFlow').text(cashFlow + ' $');
+  $('#previousFunds').text(previousFunds + ' $');
+  $('#currentFunds').text(currentFunds + ' $');
 
   this._toggleDisplay();
 };

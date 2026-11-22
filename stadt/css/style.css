@@ -925,3 +925,94 @@ nav li {
   left: 5px;
   bottom: 5px;
 }
+
+/* ==== Dorfplaner-Layout (2026): Die Karte nutzt den ganzen Bildschirm ======================================
+ * Die Kopfzeile ist nur noch hinter dem Titel (links) und den Links (rechts) zu sehen, dazwischen liegt die
+ * Karte. Die Fußzeile mit Herkunft und Lizenz wird im Spiel eingeklappt und über „Info & Lizenz“ geöffnet. */
+
+#wrapper {
+  top: 0;
+}
+
+main {
+  bottom: 0;
+}
+
+#header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  height: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  pointer-events: none; /* Klicks zwischen Titel und Links gehen auf die Karte */
+}
+
+#header > div, #header > nav {
+  pointer-events: auto;
+  background-color: darkslategray;
+  background-image: repeating-linear-gradient(-45deg, transparent, transparent 35px, rgba(255, 255, 255, 0.2) 35px, rgba(255, 255, 255, 0.2) 70px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+#header > div {
+  padding: 6px 18px;
+  border-bottom-right-radius: 12px;
+}
+
+#header > nav {
+  padding: 0 6px;
+  border-bottom-left-radius: 12px;
+}
+
+#header h1 {
+  margin-left: 0;
+}
+
+/* Die Bedienkästen rutschen etwas nach unten, damit sie nicht unter Titel und Links liegen. */
+#infobar, #miscButtons, #RCIContainer, #controls, #debug, #monstertv {
+  margin-top: 34px;
+}
+
+#miscButtons {
+  height: auto;
+}
+
+#notifications {
+  bottom: 16px !important;
+}
+
+#footer {
+  position: fixed;
+  height: auto; /* sonst ragt umbrechender Text beim Einklappen heraus */
+  z-index: 6;
+  transition: transform 0.25s ease-in-out;
+}
+
+#footer.collapsed {
+  transform: translateY(100%);
+}
+
+#footerToggle {
+  display: none; /* erst im Spiel sichtbar, siehe Game.setupFooterToggle() */
+  position: fixed;
+  left: 8px;
+  bottom: 8px;
+  z-index: 7;
+  width: auto;
+  height: auto;
+  padding: 3px 12px;
+  border: none;
+  border-radius: 12px;
+  background-color: darkslategray;
+  color: white;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+#footerToggle:hover {
+  opacity: 1;
+}

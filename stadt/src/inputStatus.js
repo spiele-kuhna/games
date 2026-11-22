@@ -258,7 +258,7 @@ var toolButtonHandler = function(e) {
   this.toolWidth = $(e.target).attr('data-size');
   this.currentTool = this.gameTools[this.toolName];
   this.toolColour = $(e.target).attr('data-colour');
-  $(toolOutputID).html('Tools');
+  $(toolOutputID).html('Werkzeuge');
 
   if (this.toolName !== 'query') {
     $(this.canvasID).removeClass('helpPointer');
@@ -274,7 +274,7 @@ var toolButtonHandler = function(e) {
 
 InputStatus.prototype.speedChangeHandler = function(e) {
   var requestedSpeed = $('#pauseRequest').text();
-  var newRequest = requestedSpeed === 'Pause' ? 'Play' : 'Pause';
+  var newRequest = requestedSpeed === 'Pause' ? 'Weiter' : 'Pause';
   $('#pauseRequest').text(newRequest);
   this._emitEvent(Messages.SPEED_CHANGE, requestedSpeed);
 };

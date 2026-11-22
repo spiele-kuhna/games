@@ -18,49 +18,49 @@ import { Simulation } from './simulation.js';
 // TODO Some kind of rudimentary L20N based on navigator.language?
 
 // Query tool strings
-var densityStrings = ['Low', 'Medium', 'High', 'Very High'];
-var landValueStrings = ['Slum', 'Lower Class', 'Middle Class', 'High'];
-var crimeStrings = ['Safe', 'Light', 'Moderate', 'Dangerous'];
-var pollutionStrings = ['None', 'Moderate', 'Heavy', 'Very Heavy'];
-var rateStrings = ['Declining', 'Stable', 'Slow Growth', 'Fast Growth'];
-var zoneTypes = ['Clear', 'Water', 'Trees', 'Rubble', 'Flood', 'Radioactive Waste',
-                 'Fire', 'Road', 'Power', 'Rail', 'Residential', 'Commercial',
-                 'Industrial', 'Seaport', 'Airport', 'Coal Power', 'Fire Department',
-                 'Police Department', 'Stadium', 'Nuclear Power', 'Draw Bridge',
-                 'Radar Dish', 'Fountain', 'Industrial', 'Steelers 38  Bears 3',
-                 'Draw Bridge', 'Ur 238'];
+var densityStrings = ['Niedrig', 'Mittel', 'Hoch', 'Sehr hoch'];
+var landValueStrings = ['Elendsviertel', 'Einfach', 'Mittel', 'Gehoben'];
+var crimeStrings = ['Sicher', 'Gering', 'Mäßig', 'Gefährlich'];
+var pollutionStrings = ['Keine', 'Mäßig', 'Stark', 'Sehr stark'];
+var rateStrings = ['Schrumpfend', 'Stabil', 'Langsames Wachstum', 'Schnelles Wachstum'];
+var zoneTypes = ['Freie Fläche', 'Wasser', 'Wald', 'Trümmer', 'Hochwasser', 'Radioaktiver Abfall',
+                 'Feuer', 'Straße', 'Stromleitung', 'Schiene', 'Wohngebiet', 'Gewerbegebiet',
+                 'Industriegebiet', 'Hafen', 'Flughafen', 'Kohlekraftwerk', 'Feuerwehr',
+                 'Polizei', 'Stadion', 'Kernkraftwerk', 'Zugbrücke',
+                 'Radarschirm', 'Brunnen', 'Industriegebiet', 'Heim 3 : Gast 1',
+                 'Zugbrücke', 'Reaktorkern'];
 
 // Evaluation window
 var gameLevel = {};
-gameLevel['' + Simulation.LEVEL_EASY] = 'Easy';
-gameLevel['' + Simulation.LEVEL_MED] = 'Medium';
-gameLevel['' + Simulation.LEVEL_HARD] = 'Hard';
+gameLevel['' + Simulation.LEVEL_EASY] = 'Leicht';
+gameLevel['' + Simulation.LEVEL_MED] = 'Mittel';
+gameLevel['' + Simulation.LEVEL_HARD] = 'Schwer';
 
 var cityClass = {};
-cityClass[Evaluation.CC_VILLAGE] = 'VILLAGE';
-cityClass[Evaluation.CC_TOWN] = 'TOWN';
-cityClass[Evaluation.CC_CITY] = 'CITY';
-cityClass[Evaluation.CC_CAPITAL] = 'CAPITAL';
-cityClass[Evaluation.CC_METROPOLIS] = 'METROPOLIS';
+cityClass[Evaluation.CC_VILLAGE] = 'DORF';
+cityClass[Evaluation.CC_TOWN] = 'KLEINSTADT';
+cityClass[Evaluation.CC_CITY] = 'STADT';
+cityClass[Evaluation.CC_CAPITAL] = 'HAUPTSTADT';
+cityClass[Evaluation.CC_METROPOLIS] = 'METROPOLE';
 cityClass[Evaluation.CC_MEGALOPOLIS] = 'MEGALOPOLIS';
 
 var problems = {};
-problems[Evaluation.CRIME] = 'Crime';
-problems[Evaluation.POLLUTION] = 'Pollution';
-problems[Evaluation.HOUSING] = 'Housing';
-problems[Evaluation.TAXES] = 'Taxes';
-problems[Evaluation.TRAFFIC] = 'Traffic';
-problems[Evaluation.UNEMPLOYMENT] = 'Unemployment';
-problems[Evaluation.FIRE] = 'Fire';
+problems[Evaluation.CRIME] = 'Kriminalität';
+problems[Evaluation.POLLUTION] = 'Verschmutzung';
+problems[Evaluation.HOUSING] = 'Wohnungsnot';
+problems[Evaluation.TAXES] = 'Steuern';
+problems[Evaluation.TRAFFIC] = 'Verkehr';
+problems[Evaluation.UNEMPLOYMENT] = 'Arbeitslosigkeit';
+problems[Evaluation.FIRE] = 'Brände';
 
 // months
-var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-              'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+var months = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun',
+              'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
 
 // Tool strings
 var toolMessages = {
-  noMoney: 'Insufficient funds to build that',
-  needsDoze: 'Area must be bulldozed first'
+  noMoney: 'Dafür reicht das Geld nicht',
+  needsDoze: 'Erst die Fläche freiräumen (Abriss)'
 };
 
 // Message strings
@@ -110,45 +110,45 @@ goodMessages[Messages.REACHED_METROPOLIS] = true;
 goodMessages[Messages.REACHED_TOWN] = true;
 
 var messageText = {};
-messageText[Messages.FIRE_STATION_NEEDS_FUNDING] = 'Fire departments need funding';
-messageText[Messages.NEED_AIRPORT] = 'Commerce requires an Airport';
-messageText[Messages.NEED_FIRE_STATION] = 'Citizens demand a Fire Department';
-messageText[Messages.NEED_ELECTRICITY] = 'Build a Power Plant';
-messageText[Messages.NEED_MORE_INDUSTRIAL] = 'More industrial zones needed';
-messageText[Messages.NEED_MORE_COMMERCIAL] = 'More commercial zones needed';
-messageText[Messages.NEED_MORE_RESIDENTIAL] = 'More residential zones needed';
-messageText[Messages.NEED_MORE_RAILS] = 'Inadequate rail system';
-messageText[Messages.NEED_MORE_ROADS] = 'More roads required';
-messageText[Messages.NEED_POLICE_STATION] = 'Citizens demand a Police Department';
-messageText[Messages.NEED_SEAPORT] = 'Industry requires a Sea Port';
-messageText[Messages.NEED_STADIUM] = 'Residents demand a Stadium';
-messageText[Messages.ROAD_NEEDS_FUNDING] = 'Roads deteriorating, due to lack of funds';
-messageText[Messages.POLICE_NEEDS_FUNDING] = 'Police departments need funding';
-messageText[Messages.WELCOME] = 'Welcome to micropolisJS';
-messageText[Messages.BLACKOUTS_REPORTED] = 'Brownouts, build another Power Plant';
-messageText[Messages.EARTHQUAKE] = 'Major earthquake reported !!';
-messageText[Messages.EXPLOSION_REPORTED] = 'Explosion detected ';
-messageText[Messages.FLOODING_REPORTED] = 'Flooding reported !';
-messageText[Messages.FIRE_REPORTED] = 'Fire reported ';
-messageText[Messages.HEAVY_TRAFFIC] = 'Heavy Traffic reported';
-messageText[Messages.HELICOPTER_CRASHED] = 'A helicopter crashed ';
-messageText[Messages.HIGH_CRIME] = 'Crime very high';
-messageText[Messages.HIGH_POLLUTION] = 'Pollution very high';
-messageText[Messages.MONSTER_SIGHTED] = 'A Monster has been sighted !';
-messageText[Messages.NO_MONEY] = 'YOUR CITY HAS GONE BROKE';
-messageText[Messages.NOT_ENOUGH_POWER] = 'Blackouts reported: insufficient power capacity';
-messageText[Messages.NUCLEAR_MELTDOWN] = 'A Nuclear Meltdown has occurred !!';
-messageText[Messages.PLANE_CRASHED] = 'A plane has crashed ';
-messageText[Messages.SHIP_CRASHED] = 'Shipwreck reported ';
-messageText[Messages.TAX_TOO_HIGH] = 'Citizens upset. The tax rate is too high';
-messageText[Messages.TORNADO_SIGHTED] = 'Tornado reported !';
-messageText[Messages.TRAFFIC_JAMS] = 'Frequent traffic jams reported';
-messageText[Messages.TRAIN_CRASHED] = 'A train crashed ';
-messageText[Messages.REACHED_CAPITAL] = 'Population has reached 50,000';
-messageText[Messages.REACHED_CITY] = 'Population has reached 10,000';
-messageText[Messages.REACHED_MEGALOPOLIS] = 'Population has reached 500,000';
-messageText[Messages.REACHED_METROPOLIS] = 'Population has reached 100,000';
-messageText[Messages.REACHED_TOWN] = 'Population has reached 2,000';
+messageText[Messages.FIRE_STATION_NEEDS_FUNDING] = 'Die Feuerwehr braucht mehr Geld';
+messageText[Messages.NEED_AIRPORT] = 'Das Gewerbe braucht einen Flughafen';
+messageText[Messages.NEED_FIRE_STATION] = 'Die Bürger fordern eine Feuerwehr';
+messageText[Messages.NEED_ELECTRICITY] = 'Baue ein Kraftwerk';
+messageText[Messages.NEED_MORE_INDUSTRIAL] = 'Mehr Industriegebiete nötig';
+messageText[Messages.NEED_MORE_COMMERCIAL] = 'Mehr Gewerbegebiete nötig';
+messageText[Messages.NEED_MORE_RESIDENTIAL] = 'Mehr Wohngebiete nötig';
+messageText[Messages.NEED_MORE_RAILS] = 'Das Schienennetz reicht nicht aus';
+messageText[Messages.NEED_MORE_ROADS] = 'Mehr Straßen nötig';
+messageText[Messages.NEED_POLICE_STATION] = 'Die Bürger fordern eine Polizeiwache';
+messageText[Messages.NEED_SEAPORT] = 'Die Industrie braucht einen Hafen';
+messageText[Messages.NEED_STADIUM] = 'Die Bewohner wünschen sich ein Stadion';
+messageText[Messages.ROAD_NEEDS_FUNDING] = 'Straßen verfallen, weil Geld fehlt';
+messageText[Messages.POLICE_NEEDS_FUNDING] = 'Die Polizei braucht mehr Geld';
+messageText[Messages.WELCOME] = 'Willkommen bei Dorfplaner';
+messageText[Messages.BLACKOUTS_REPORTED] = 'Stromausfälle – baue ein weiteres Kraftwerk';
+messageText[Messages.EARTHQUAKE] = 'Schweres Erdbeben!';
+messageText[Messages.EXPLOSION_REPORTED] = 'Explosion gemeldet';
+messageText[Messages.FLOODING_REPORTED] = 'Hochwasser gemeldet!';
+messageText[Messages.FIRE_REPORTED] = 'Feuer gemeldet';
+messageText[Messages.HEAVY_TRAFFIC] = 'Viel Verkehr gemeldet';
+messageText[Messages.HELICOPTER_CRASHED] = 'Ein Hubschrauber ist abgestürzt';
+messageText[Messages.HIGH_CRIME] = 'Sehr hohe Kriminalität';
+messageText[Messages.HIGH_POLLUTION] = 'Sehr hohe Verschmutzung';
+messageText[Messages.MONSTER_SIGHTED] = 'Ein Monster wurde gesichtet!';
+messageText[Messages.NO_MONEY] = 'DEINE STADT IST PLEITE';
+messageText[Messages.NOT_ENOUGH_POWER] = 'Stromausfälle: Die Kraftwerke reichen nicht aus';
+messageText[Messages.NUCLEAR_MELTDOWN] = 'Kernschmelze im Kraftwerk!';
+messageText[Messages.PLANE_CRASHED] = 'Ein Flugzeug ist abgestürzt';
+messageText[Messages.SHIP_CRASHED] = 'Schiffsunglück gemeldet';
+messageText[Messages.TAX_TOO_HIGH] = 'Die Bürger sind verärgert: Die Steuern sind zu hoch';
+messageText[Messages.TORNADO_SIGHTED] = 'Tornado gemeldet!';
+messageText[Messages.TRAFFIC_JAMS] = 'Häufige Staus gemeldet';
+messageText[Messages.TRAIN_CRASHED] = 'Ein Zug ist verunglückt';
+messageText[Messages.REACHED_CAPITAL] = 'Die Stadt hat 50.000 Einwohner';
+messageText[Messages.REACHED_CITY] = 'Die Stadt hat 10.000 Einwohner';
+messageText[Messages.REACHED_MEGALOPOLIS] = 'Die Stadt hat 500.000 Einwohner';
+messageText[Messages.REACHED_METROPOLIS] = 'Die Stadt hat 100.000 Einwohner';
+messageText[Messages.REACHED_TOWN] = 'Die Stadt hat 2.000 Einwohner';
 
 var Text = {
   badMessages: badMessages,

@@ -62,7 +62,7 @@ function Game(gameMap, tileSet, snowTileSet, spriteSheet, difficulty, name) {
   this.defaultSpeed = Simulation.SPEED_MED;
   this.simulation = new Simulation(this.gameMap, difficulty, this.defaultSpeed, savedGame);
 
-  this.name = name || 'MyTown';
+  this.name = name || 'Mein Dorf';
   this.everClicked = false;
 
   if (savedGame)
@@ -243,6 +243,11 @@ function Game(gameMap, tileSet, snowTileSet, spriteSheet, difficulty, name) {
 
   // Paint the map
   var debug = Config.debug || Config.gameDebug;
+
+  // Dorfplaner: Im Debug-Modus (?debug=1) ist das Spiel in der Browser-Konsole als dorfplanerGame erreichbar,
+  // z. B. um Gebäude zum Testen direkt auf die Karte zu setzen. Im normalen Spiel passiert hier nichts.
+  if (debug)
+    window.dorfplanerGame = this;
   if (debug) {
     $('#debug').toggle();
     this.frameCount = 0;
@@ -259,7 +264,7 @@ function Game(gameMap, tileSet, snowTileSet, spriteSheet, difficulty, name) {
 // Dorfplaner: Knopf und Taste V schalten zwischen Draufsicht und Isometrie um.
 Game.prototype.setupViewControls = function() {
   var updateLabel = function() {
-    $('#viewRequest').text(this.gameCanvas.isIsometric() ? 'Top-down view' : 'Isometric view');
+    $('#viewRequest').text(this.gameCanvas.isIsometric() ? 'Draufsicht' : '3D-Ansicht');
   }.bind(this);
 
   $('#viewRequest').click(function(e) {
@@ -323,7 +328,30 @@ var nextFrame =
   window.webkitRequestAnimationFrame;
 
 
+// Dorfplaner: Im Spiel ist die Fußzeile eingeklappt, damit man mehr von der Karte sieht.
+// Der Knopf „Info & Lizenz“ klappt sie auf und wieder zu – Herkunft und Lizenz bleiben so immer erreichbar.
+Game.prototype.setupFooterToggle = function() {
+  var footer = $('#footer');
+  var button = $('#footerToggle');
+
+  var update = function() {
+    button.text(footer.hasClass('collapsed') ? 'Info & Lizenz' : 'Schließen');
+  };
+
+  footer.addClass('collapsed');
+  button.show();
+  update();
+
+  button.click(function(e) {
+    e.preventDefault();
+    footer.toggleClass('collapsed');
+    update();
+  });
+};
+
+
 Game.prototype.revealControls = function() {
+  this.setupFooterToggle();
  $('.initialHidden').each(function(e) {
    $(this).removeClass('initialHidden');
  });
@@ -528,7 +556,7 @@ Game.prototype.handleTool = function(data) {
       break;
 
     default:
-      $('#toolOutput').html('Tools');
+      $('#toolOutput').html('Werkzeuge');
   }
 };
 
@@ -594,41 +622,42 @@ Game.prototype.processFrontEndMessage = function(message) {
   var d = new Date();
 
   if (Text.goodMessages[subject] !== undefined) {
-    var cMessage = this.name + ' is now a ';
+    // Dorfplaner: deutscher Glückwunschtext
+    var cMessage = '';
 
     switch (subject) {
       case Messages.REACHED_CAPITAL:
         if (!this._reachedCapital) {
           this._reachedCapital = true;
-          cMessage += 'capital!';
+          cMessage = this.name + ' ist jetzt eine Hauptstadt!';
         }
         break;
 
       case Messages.REACHED_CITY:
         if (!this._reachedCity) {
           this._reachedCity = true;
-          cMessage += 'city!';
+          cMessage = this.name + ' ist jetzt eine Stadt!';
         }
         break;
 
       case Messages.REACHED_MEGALOPOLIS:
         if (!this._reachedMegalopolis) {
           this._reachedMegalopolis = true;
-          cMessage += 'megalopolis!';
+          cMessage = this.name + ' ist jetzt eine Megalopolis!';
         }
         break;
 
       case Messages.REACHED_METROPOLIS:
         if (!this._reachedMetropolis) {
           this._reachedMetropolis = true;
-          cMessage += 'metropolis!';
+          cMessage = this.name + ' ist jetzt eine Metropole!';
         }
         break;
 
       case Messages.REACHED_TOWN:
         if (!this._reachedTown) {
           this._reachedTown = true;
-          cMessage += 'town!';
+          cMessage = this.name + ' ist jetzt eine Kleinstadt!';
         }
         break;
     }
@@ -638,7 +667,7 @@ Game.prototype.processFrontEndMessage = function(message) {
       this._notificationBar.goodNews(message);
     }
 
-    if (cMessage !== (this.name + ' is now a ')) {
+    if (cMessage !== '') {
       this.dialogOpen = true;
       this._openWindow = 'congratsWindow';
       this.congratsWindow.open(cMessage);
