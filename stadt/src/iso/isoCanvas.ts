@@ -45,7 +45,7 @@ interface WaterSourceLike {
 }
 
 /** So viele Zoomstufen behalten ihre fertigen Kachelbilder (je Stufe einige Sammelbild-Seiten Speicher) */
-const KEPT_PAINTERS = 3;
+const KEPT_PAINTERS = 2;
 
 /** Sprite-Art Schiff (spriteConstants.ts) */
 const SHIP_SPRITE = 4;

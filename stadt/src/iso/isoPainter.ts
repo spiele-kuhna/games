@@ -141,8 +141,15 @@ interface RenderedImage {
     height: number;
 }
 
+/** Eine Seite des Sammelbilds und wann sie zuletzt gebraucht wurde (Bildnummer) */
+interface AtlasPage {
+    canvas: HTMLCanvasElement;
+    lastUsed: number;
+}
+
 /** Ein zwischengespeichertes Kachelbild: Ausschnitt (sx, sy, sw, sh) aus einer Sammelbild-Seite. */
 interface CachedImage {
+    atlas: AtlasPage;
     page: HTMLCanvasElement;
     sx: number;
     sy: number;
@@ -157,13 +164,25 @@ interface CachedImage {
  * wichtigste Grund, warum Verschieben und Zoomen flüssig laufen. Gefüllt wird zeilenweise („Regalbretter“).
  */
 const ATLAS_PAGE = 2048;
-/** Mehr Seiten nicht – dann wird der Zwischenspeicher geleert und bei Bedarf neu gefüllt. */
-const ATLAS_MAX_PAGES = 10;
+/*
+ * Höchstzahl der Seiten (je 2048 × 2048 Pixel = 16 MB). Ist sie erreicht, wird die am längsten nicht mehr
+ * gebrauchte Seite geleert und wiederverwendet. Nur wenn alle Seiten im aktuellen Bild gebraucht werden, darf es
+ * bis ATLAS_HARD_PAGES mehr werden (sehr große Zoomstufe, viele verschiedene Gebäude).
+ */
+const ATLAS_MAX_PAGES = 7;
+const ATLAS_HARD_PAGES = 12;
 
 export class IsoTilePainter {
 
     private cache: { [key: string]: CachedImage } = {};
-    private pages: HTMLCanvasElement[] = [];
+    /*
+     * Zuletzt gezeichnete Variante je Kachel ohne Animationsbild (Autos, Rauch, Blinken). Fehlt eine neue Variante
+     * noch, zeigen wir solange diese – dann flackert beim Zoomen und bei laufendem Spiel nichts.
+     */
+    private byBase: { [key: string]: CachedImage } = {};
+    private pages: AtlasPage[] = [];
+    /** zählt die Bilder mit (für „zuletzt gebraucht“) */
+    private frameNo = 0;
     /** So viele Millisekunden dürfen je Bild für neue Kachelbilder draufgehen … */
     private budget = Infinity;
     /** … und so viele sind in diesem Bild schon verbraucht */
@@ -231,14 +250,24 @@ export class IsoTilePainter {
     beginFrame(budgetMs: number, fallback: IsoTilePainter | null): void {
         this.budget = budgetMs;
         this.spent = 0;
+        this.frameNo++;
         this.fallback = fallback;
         this.incomplete = false;
     }
 
     drawTile(ctx: CanvasRenderingContext2D, sx: number, sy: number, request: PaintRequest): void {
-        const key = this.keyFor(request);
+        const [key, base] = this.keysFor(request);
         if (!this.cache[key] && this.spent >= this.budget) {
             this.incomplete = true;
+            // 1. dieselbe Kachel in einer anderen Animationsphase
+            const similar = this.byBase[base];
+            if (similar) {
+                similar.atlas.lastUsed = this.frameNo;
+                ctx.drawImage(similar.page, similar.sx, similar.sy, similar.sw, similar.sh, sx - this.tileWidth / 2,
+                              sy - similar.headroom, this.tileWidth, this.tileHeight + similar.headroom);
+                return;
+            }
+            // 2. dieselbe Kachel aus der vorherigen Zoomstufe, 3. schlichte Raute
             const old = this.fallback ? this.fallback.cache[key] : undefined;
             if (old && this.fallback) {
                 const scale = this.tileWidth / this.fallback.tileWidth;
@@ -259,9 +288,45 @@ export class IsoTilePainter {
             }
             return;
         }
-        const image = this.imageFor(request);
+        const image = this.imageFor(request, key, base);
+        image.atlas.lastUsed = this.frameNo;
         ctx.drawImage(image.page, image.sx, image.sy, image.sw, image.sh, sx - this.tileWidth / 2, sy - image.headroom,
                       this.tileWidth, this.tileHeight + image.headroom);
+    }
+
+    /** Seite leeren: alle Kachelbilder darauf vergessen (werden bei Bedarf neu gezeichnet) */
+    private evict(page: AtlasPage): void {
+        for (const key of Object.keys(this.cache)) {
+            if (this.cache[key].atlas === page) { delete this.cache[key]; }
+        }
+        for (const key of Object.keys(this.byBase)) {
+            if (this.byBase[key].atlas === page) { delete this.byBase[key]; }
+        }
+        (page.canvas.getContext("2d") as CanvasRenderingContext2D).clearRect(0, 0, ATLAS_PAGE, ATLAS_PAGE);
+    }
+
+    /** Neue Seite zum Befüllen: neu anlegen oder die am längsten nicht gebrauchte wiederverwenden */
+    private openPage(): void {
+        let page: AtlasPage | null = null;
+        if (this.pages.length >= ATLAS_MAX_PAGES) {
+            const oldest = this.pages.reduce((a, b) => (b.lastUsed < a.lastUsed ? b : a));
+            if (oldest.lastUsed < this.frameNo || this.pages.length >= ATLAS_HARD_PAGES) {
+                this.evict(oldest);
+                this.pages.splice(this.pages.indexOf(oldest), 1);
+                page = oldest;
+            }
+        }
+        if (page === null) {
+            const canvas = document.createElement("canvas");
+            canvas.width = ATLAS_PAGE;
+            canvas.height = ATLAS_PAGE;
+            page = { canvas, lastUsed: this.frameNo };
+        }
+        page.lastUsed = this.frameNo;
+        this.pages.push(page);   // die zuletzt angehängte Seite wird befüllt
+        this.shelfX = 0;
+        this.shelfY = 0;
+        this.shelfHeight = 0;
     }
 
     /** Frisch gezeichnetes Bild ins Sammelbild kopieren und den Ausschnitt merken. */
@@ -275,23 +340,13 @@ export class IsoTilePainter {
             this.shelfHeight = 0;
         }
         if (this.pages.length === 0 || this.shelfY + h > ATLAS_PAGE) {
-            if (this.pages.length >= ATLAS_MAX_PAGES) {
-                // voll: alles verwerfen, die sichtbaren Kacheln werden sofort neu gezeichnet
-                this.cache = {};
-                this.pages = [];
-            }
-            const page = document.createElement("canvas");
-            page.width = ATLAS_PAGE;
-            page.height = ATLAS_PAGE;
-            this.pages.push(page);
-            this.shelfX = 0;
-            this.shelfY = 0;
-            this.shelfHeight = 0;
+            this.openPage();
         }
-        const page = this.pages[this.pages.length - 1];
+        const atlas = this.pages[this.pages.length - 1];
+        const page = atlas.canvas;
         (page.getContext("2d") as CanvasRenderingContext2D).drawImage(image.canvas, 0, 0, w, h, this.shelfX, this.shelfY,
                                                                        w, h);
-        const cached = { headroom: image.headroom, page, sh: h, sw: w, sx: this.shelfX, sy: this.shelfY };
+        const cached = { atlas, headroom: image.headroom, page, sh: h, sw: w, sx: this.shelfX, sy: this.shelfY };
         this.shelfX += w + 1;
         this.shelfHeight = Math.max(this.shelfHeight, h);
         return cached;
@@ -302,31 +357,37 @@ export class IsoTilePainter {
         return Object.keys(this.cache).length;
     }
 
-    private imageFor(request: PaintRequest): CachedImage {
-        const key = this.keyFor(request);
+    private imageFor(request: PaintRequest, key: string, base: string): CachedImage {
         let image = this.cache[key];
         if (!image) {
             const start = performance.now();
             image = this.store(this.renderImage(request));
             this.cache[key] = image;
+            this.byBase[base] = image;
             this.spent += performance.now() - start;
         }
         return image;
     }
 
-    private keyFor(request: PaintRequest): string {
+    /*
+     * Schlüssel für den Zwischenspeicher: [vollständig, ohne Animationsphase]. Der zweite fasst alle Varianten
+     * zusammen, die sich nur durch Autos, Rauch, Blinken oder Animationsbild unterscheiden.
+     */
+    private keysFor(request: PaintRequest): [string, string] {
         const look = request.look;
         const b = request.building;
-        const key = [look.ground, look.cover, look.zone, look.roads, look.rails, look.wires, look.bridge,
-                     request.landSides, request.variant,
-                     b || look.zone === "park" ? [b ? [b.zone, b.size, b.dx, b.dy, b.level, b.value].join(",") : "park",
-                                                  request.rotation].join(",") : "-",
-                     request.traffic.level, request.traffic.frame, request.frame, request.smoke,
-                     request.lightning, waterKey(request.water),
-                     request.bridgeHeights ? [request.bridgeHeights.north, request.bridgeHeights.east,
-                                              request.bridgeHeights.south, request.bridgeHeights.west].join(",")
-                                           : "-", request.deckOnly ? "deck" : ""].join("|");
-        return key;
+        const common = [look.ground, look.cover, look.zone, look.roads, look.rails, look.wires, look.bridge,
+                        request.landSides, request.variant,
+                        b || look.zone === "park" ? [b ? [b.zone, b.size, b.dx, b.dy, b.level, b.value].join(",") : "park",
+                                                     request.rotation].join(",") : "-",
+                        request.traffic.level, request.smoke,
+                        request.bridgeHeights ? [request.bridgeHeights.north, request.bridgeHeights.east,
+                                                 request.bridgeHeights.south, request.bridgeHeights.west].join(",")
+                                              : "-", request.deckOnly ? "deck" : ""].join("|");
+        const underground = request.water && request.water.underground ? waterKey(request.water) : "-";
+        const full = common + "|" + [request.traffic.frame, request.frame, request.lightning ? 1 : 0,
+                                     waterKey(request.water)].join("|");
+        return [full, common + "|" + underground];
     }
 
     private renderImage(request: PaintRequest): RenderedImage {
