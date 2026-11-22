@@ -727,7 +727,9 @@ GameCanvas.prototype.setWaterSource = function(water) {
 // Untergrundansicht: Karte abgedunkelt, darüber die Rohre (grau ohne, blau mit Wasser)
 GameCanvas.prototype.setUnderground = function(underground) {
   this._underground = underground;
-  this.forceRepaint();
+  // Nur beim nächsten Bild alles neu zeichnen. Nicht forceRepaint(): Das setzt die Größe des gemeinsamen
+  // Canvas zurück und verschiebt sonst die 3D-Ansicht, wenn sie gerade aktiv ist (Fehler vom 22.11.2026).
+  this._lastPaintedTiles = null;
 };
 
 
