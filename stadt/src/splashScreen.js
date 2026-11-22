@@ -64,6 +64,10 @@ function SplashScreen(tileSet, snowTileSet, spriteSheet) {
   $('#saveRequest').prop('disabled', !Storage.canStore);
   $('#splashLoad').prop('disabled', !(Storage.canStore && Storage.getSavedGame() !== null));
 
+  // Dorfplaner: erklären, warum „Spiel laden“ gesperrt ist (Spielstände liegen nur in diesem Browser)
+  if ($('#splashLoad').prop('disabled'))
+    $('#splashLoad').attr('title', 'In diesem Browser ist noch kein Spiel gespeichert. Im Spiel: Knopf „Speichern“.');
+
   // Paint the minimap
   this.splashCanvas = new SplashCanvas('splashContainer', tileSet);
   this.splashCanvas.paint(this.map);

@@ -1015,3 +1015,21 @@ main {
 #footerToggle:hover {
   opacity: 1;
 }
+
+/* Dorfplaner: Formular „Neues Spiel“ – jede Auswahl bleibt mit ihrem Kreis zusammen */
+#playForm .formRow {
+  margin: 6px 0;
+}
+
+#playForm .choice {
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+#playForm .choice label {
+  margin-left: 3px;
+}
+
+#splashLoad:disabled {
+  cursor: not-allowed;
+}

@@ -59,12 +59,16 @@
         <div id="start" class="mintcream open shadow padding10 centred">
           <h2 class="chunk alignCenter">Neues Spiel</h2>
           <form id="playForm">
-            <label for="nameForm">Name der Stadt (höchstens 15 Zeichen)</label>
-            <input id="nameForm" autofocus required class="margin10" type="text" maxlength="15">
-            Schwierigkeit
-            <input type="radio" class="difficulty" name="difficulty" id="difficultyEasy" value="0" checked="checked"><label for="difficultyEasy">Leicht</label>
-            <input type="radio" class="difficulty" name="difficulty" id="difficultyMed" value="1"><label for="difficultyMed">Mittel</label>
-            <input type="radio" class="difficulty" name="difficulty" id="difficultyHard" value="2"><label for="difficultyHard">Schwer</label>
+            <div class="formRow">
+              <label for="nameForm">Name der Stadt (höchstens 15 Zeichen)</label><br>
+              <input id="nameForm" autofocus required class="margin10" type="text" maxlength="15">
+            </div>
+            <div class="formRow">
+              Schwierigkeit:
+              <span class="choice"><input type="radio" class="difficulty" name="difficulty" id="difficultyEasy" value="0" checked="checked"><label for="difficultyEasy">Leicht</label></span>
+              <span class="choice"><input type="radio" class="difficulty" name="difficulty" id="difficultyMed" value="1"><label for="difficultyMed">Mittel</label></span>
+              <span class="choice"><input type="radio" class="difficulty" name="difficulty" id="difficultyHard" value="2"><label for="difficultyHard">Schwer</label></span>
+            </div>
             <div id="playSubmitDiv">
               <input id="playit" type="submit" value="Los geht's!">
             </div>
