@@ -193,6 +193,9 @@ export class IsoTilePainter {
         ctx.globalAlpha = 1;
         ctx.lineCap = "butt";
         ctx.clearRect(0, 0, width, height);
+        // ab hier in CSS-Pixeln; (0, 0) ist die obere Spitze der Raute
+        ctx.scale(this.pixelRatio, this.pixelRatio);
+        ctx.translate(this.tileWidth / 2, headroom);
         return { canvas: this.scratch, ctx, height, width };
     }
     private shelfX = 0;
@@ -242,6 +245,17 @@ export class IsoTilePainter {
                 const headroom = old.headroom * scale;
                 ctx.drawImage(old.page, old.sx, old.sy, old.sw, old.sh, sx - this.tileWidth / 2, sy - headroom,
                               this.tileWidth, this.tileHeight + headroom);
+            } else {
+                // kein Ersatzbild: schlichte Raute in Boden- bzw. Wasserfarbe statt einer dunklen Lücke
+                ctx.beginPath();
+                ctx.moveTo(sx, sy);
+                ctx.lineTo(sx + this.tileWidth / 2, sy + this.tileHeight / 2);
+                ctx.lineTo(sx, sy + this.tileHeight);
+                ctx.lineTo(sx - this.tileWidth / 2, sy + this.tileHeight / 2);
+                ctx.closePath();
+                ctx.fillStyle = request.look.ground === "water" ? COLOURS.water[0]
+                              : request.building !== null || request.look.roads !== 0 ? "#a8a49a" : COLOURS.grass[0];
+                ctx.fill();
             }
             return;
         }
