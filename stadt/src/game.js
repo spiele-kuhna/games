@@ -24,6 +24,8 @@ import { GameCanvas } from './gameCanvas.js';
 import { GameMap } from './gameMap.js';
 import { InfoBar } from './infoBar.js';
 import { InputStatus } from './inputStatus.js';
+import { IsoCanvas, ZOOM_LEVELS } from './iso/isoCanvas.ts';
+import { ViewSwitcher } from './iso/viewSwitcher.js';
 import * as Messages from './messages.ts';
 import { MonsterTV } from './monsterTV.js';
 import { NagWindow } from './nagWindow.js';
@@ -69,8 +71,15 @@ function Game(gameMap, tileSet, snowTileSet, spriteSheet, difficulty, name) {
   this.rci = new RCI('RCIContainer', this.simulation);
 
   // Note: must init canvas before inputStatus
-  this.gameCanvas = new GameCanvas('canvasContainer');
-  this.gameCanvas.init(this.gameMap, this.tileSet, spriteSheet);
+  // Dorfplaner: Draufsicht und isometrische Ansicht teilen sich ein Canvas-Element; der ViewSwitcher
+  // reicht alle Aufrufe an die gerade aktive Ansicht weiter (siehe iso/viewSwitcher.js).
+  var topCanvas = new GameCanvas('canvasContainer');
+  topCanvas.init(this.gameMap, this.tileSet, spriteSheet);
+  var isoCanvas = new IsoCanvas(document.getElementById(GameCanvas.DEFAULT_ID));
+  isoCanvas.init(this.gameMap);
+  this.gameCanvas = new ViewSwitcher(topCanvas, isoCanvas);
+  this.gameCanvas.setMode(ViewSwitcher.loadPreference());
+  this.setupViewControls();
   this.inputStatus = new InputStatus(this.gameMap, tileSet.tileWidth);
 
   this.dialogOpen = false;
@@ -245,6 +254,50 @@ function Game(gameMap, tileSet, snowTileSet, spriteSheet, difficulty, name) {
   this.animate = (debug ? debugAnimate : this.commonAnimate).bind(this);
   this.animate();
 }
+
+
+// Dorfplaner: Knopf und Taste V schalten zwischen Draufsicht und Isometrie um.
+Game.prototype.setupViewControls = function() {
+  var updateLabel = function() {
+    $('#viewRequest').text(this.gameCanvas.isIsometric() ? 'Top-down view' : 'Isometric view');
+  }.bind(this);
+
+  $('#viewRequest').click(function(e) {
+    e.preventDefault();
+    this.gameCanvas.toggle();
+    updateLabel();
+  }.bind(this));
+
+  $(document).keydown(function(e) {
+    // Nicht reagieren, während jemand in ein Eingabefeld tippt oder ein Fenster offen ist
+    if (this.dialogOpen || $(e.target).is('input, textarea, select'))
+      return;
+
+    if (e.key === 'v' || e.key === 'V') {
+      this.gameCanvas.toggle();
+      updateLabel();
+      e.preventDefault();
+      return;
+    }
+
+    // Drehen (Q/E) und Zoom (+/−) nur in der isometrischen Ansicht. Knöpfe und Gesten folgen in Arbeitspaket 5.
+    if (!this.gameCanvas.isIsometric())
+      return;
+
+    var iso = this.gameCanvas.getIsoCanvas();
+    var zoomIndex = ZOOM_LEVELS.indexOf(iso.zoom);
+    switch (e.key) {
+      case 'q': case 'Q': iso.rotate(-1); break;
+      case 'e': case 'E': iso.rotate(1); break;
+      case '+': case '=': iso.setZoom(ZOOM_LEVELS[Math.min(zoomIndex + 1, ZOOM_LEVELS.length - 1)]); break;
+      case '-': iso.setZoom(ZOOM_LEVELS[Math.max(zoomIndex - 1, 0)]); break;
+      default: return;
+    }
+    e.preventDefault();
+  }.bind(this));
+
+  updateLabel();
+};
 
 
 Game.prototype.save = function() {

@@ -547,6 +547,12 @@ nav li {
   color: white;
 }
 
+/* Dorfplaner: Umschalter Draufsicht / Isometrie */
+#viewRequest {
+  background-color: #2e6b3a;
+  color: white;
+}
+
 #settingsHeader, #settingsRequest {
   background-color: #663399;
   color: white;

@@ -401,6 +401,18 @@ GameCanvas.prototype.screenshotVisible = function() {
 };
 
 
+// Dorfplaner, 2026: Die isometrische Ansicht zeichnet auf dasselbe Canvas-Element (siehe iso/viewSwitcher.js).
+// Beim Zurückschalten muss die Draufsicht deshalb Größe und Inhalt komplett neu aufbauen.
+GameCanvas.prototype.forceRepaint = function() {
+  this._canvas.style.width = '';
+  this._canvas.style.height = '';
+  this._lastPaintedTiles = null;
+  this._lastCanvasWidth = -1;
+  this._lastCanvasHeight = -1;
+  this._pendingDimensionChange = true;
+};
+
+
 GameCanvas.prototype.shoogle = function() {
   // TODO Earthquakes
 };
